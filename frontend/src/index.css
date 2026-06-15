@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', 'Outfit', system-ui, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  /* Custom vibrant amber/gold theme representing luxury hospitality */
+  --color-brand-50: #fdfaf2;
+  --color-brand-100: #fbf3db;
+  --color-brand-200: #f5e1b3;
+  --color-brand-500: #d97706;
+  --color-brand-600: #b55d04;
+  --color-brand-700: #8f4403;
+  
+  --color-dark-950: #070709;
+  --color-dark-900: #0c0c0f;
+  --color-dark-800: #14141c;
+  --color-dark-700: #20202b;
+  --color-dark-600: #2d2d3d;
+  --color-dark-500: #434358;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #fbfbfd;
+  color: #1c1917;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, select, a, [role="button"] {
+  cursor: pointer;
+}
+
+/* Elegant scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e4e4e7;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d4d4d8;
+}
+
+/* Glassmorphism details */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-panel-dark {
+  background: rgba(20, 20, 28, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Interactive animations */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
