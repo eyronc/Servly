@@ -1,40 +1,100 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
-import { 
-  RefreshCw, PhilippinePeso, Clock, CheckCircle, AlertTriangle, 
-  Search, ExternalLink, Download, Printer, User, UtensilsCrossed 
+import {
+  RefreshCw, PhilippinePeso, Clock, CheckCircle, AlertTriangle,
+  Search, ExternalLink, Download, Printer, User, UtensilsCrossed, TrendingUp,
 } from 'lucide-react';
+import Logo from '../components/Logo';
+
+// ── Stat Card ──────────────────────────────────────────────────────────────
+function StatCard({ label, value, icon: Icon, accent, delay = 0 }) {
+  return (
+    <div
+      className="glass-dark hover-lift hover-lift-dark card-shimmer animate-fade-in-up"
+      style={{
+        borderRadius: 22, padding: 22, display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', animationDelay: `${delay}ms`,
+      }}
+    >
+      <div>
+        <p style={{ fontSize: 10, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {label}
+        </p>
+        <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 26, color: '#f5f5f0', marginTop: 6, lineHeight: 1 }}>
+          {value}
+        </h3>
+      </div>
+      <div
+        style={{
+          width: 50, height: 50, borderRadius: 16,
+          background: `${accent}18`,
+          border: `1px solid ${accent}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: accent,
+        }}
+      >
+        <Icon size={22} />
+      </div>
+    </div>
+  );
+}
+
+// ── Order Status Badge ─────────────────────────────────────────────────────
+function StatusDot({ status, type = 'order' }) {
+  const map = {
+    order: {
+      pending:   { color: '#f59e0b', label: 'Pending' },
+      preparing: { color: '#3b82f6', label: 'Preparing' },
+      completed: { color: '#10b981', label: 'Completed' },
+    },
+    payment: {
+      pending: { color: '#f59e0b', label: 'Unpaid' },
+      paid:    { color: '#10b981', label: 'Paid' },
+      failed:  { color: '#ef4444', label: 'Failed' },
+    },
+  };
+  const { color, label } = (map[type]?.[status]) || { color: '#71717a', label: status };
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        background: `${color}18`, border: `1px solid ${color}35`,
+        borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700, color,
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: color, display: 'inline-block' }} />
+      {label}
+    </span>
+  );
+}
 
 export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'pending', 'preparing', 'completed', 'failed'
+  const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // QR Generator states
   const [qrTableNumber, setQrTableNumber] = useState('1');
   const [qrGeneratedUrl, setQrGeneratedUrl] = useState('');
-  
+  const [justRefreshed, setJustRefreshed] = useState(false);
+
   const pollInterval = useRef(null);
 
-  // Generate QR URL on load / table change
   useEffect(() => {
     const origin = window.location.origin;
     setQrGeneratedUrl(`${origin}?table=${qrTableNumber}`);
   }, [qrTableNumber]);
 
-  // Fetch orders function
   const fetchOrders = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
-
     try {
       const response = await axios.get(`${apiBaseUrl}/api/orders`);
       setOrders(response.data);
       setError(null);
+      if (isSilent) { setJustRefreshed(true); setTimeout(() => setJustRefreshed(false), 1500); }
     } catch (err) {
       console.error('Error fetching orders:', err);
       setError('Failed to fetch orders. Ensure API server and MySQL database are active.');
@@ -44,332 +104,339 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
     }
   };
 
-  // Poll orders on mount
   useEffect(() => {
     fetchOrders();
-    pollInterval.current = setInterval(() => {
-      fetchOrders(true);
-    }, 8000); // Poll every 8 seconds
-
-    return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
-    };
+    pollInterval.current = setInterval(() => fetchOrders(true), 8000);
+    return () => { if (pollInterval.current) clearInterval(pollInterval.current); };
   }, [apiBaseUrl]);
 
-  // Handle status update
   const handleUpdateStatus = async (orderId, updates) => {
     try {
       await axios.patch(`${apiBaseUrl}/api/orders/${orderId}`, updates);
-      // Optimistically update status in state to feel instantaneous
-      setOrders(prev => prev.map(order => 
-        order.id === orderId ? { ...order, ...updates } : order
-      ));
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
     } catch (err) {
       console.error('Error updating order:', err);
-      alert('Failed to update order status. Please check database connection.');
+      alert('Failed to update order status.');
     }
   };
 
-  // Filter orders
+  // Filter logic
   const filteredOrders = orders.filter(order => {
     const customer = order.customer_name.toLowerCase();
     const matchesSearch = customer.includes(searchTerm.toLowerCase()) || order.id.toString().includes(searchTerm);
-    
-    if (activeTab === 'all') return matchesSearch;
-    if (activeTab === 'pending') return matchesSearch && order.order_status === 'pending' && order.payment_status !== 'failed';
+    if (activeTab === 'all')       return matchesSearch;
+    if (activeTab === 'pending')   return matchesSearch && order.order_status === 'pending' && order.payment_status !== 'failed';
     if (activeTab === 'preparing') return matchesSearch && order.order_status === 'preparing';
     if (activeTab === 'completed') return matchesSearch && order.order_status === 'completed';
-    if (activeTab === 'failed') return matchesSearch && order.payment_status === 'failed';
-    
+    if (activeTab === 'failed')    return matchesSearch && order.payment_status === 'failed';
     return matchesSearch;
   });
 
-  // Calculate statistics
+  // KPIs
   const paidOrders = orders.filter(o => o.payment_status === 'paid');
   const activeOrders = orders.filter(o => o.payment_status !== 'failed' && (o.order_status === 'pending' || o.order_status === 'preparing'));
   const completedOrders = orders.filter(o => o.order_status === 'completed');
   const failedOrders = orders.filter(o => o.payment_status === 'failed');
-
   const totalRevenue = paidOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
 
-  // QR Code download function
+  // QR helpers
   const downloadQRCode = () => {
     const svg = document.getElementById('qr-code-svg');
     if (!svg) return;
     const svgData = new XMLSerializer().serializeToString(svg);
-    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const svgUrl = URL.createObjectURL(svgBlob);
-    const downloadLink = document.createElement('a');
-    downloadLink.href = svgUrl;
-    downloadLink.download = `table-${qrTableNumber}-qr.svg`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `table-${qrTableNumber}-qr.svg`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  // Print QR code
   const printQRCode = () => {
-    const printContent = document.getElementById('qr-print-area').innerHTML;
-    const originalContent = document.body.innerHTML;
-    
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print QR Code - Table ${qrTableNumber}</title>
-          <style>
-            body { font-family: sans-serif; text-align: center; padding: 40px; }
-            .qr-container { border: 2px dashed #ccc; padding: 30px; display: inline-block; border-radius: 20px; }
-            h1 { margin-top: 20px; font-size: 24px; color: #333; }
-            p { color: #666; font-size: 14px; margin-bottom: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="qr-container">
-            ${printContent}
-            <h1>TABLE ${qrTableNumber}</h1>
-            <p>Scan to Browse Menu & Order</p>
-          </div>
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    const content = document.getElementById('qr-print-area').innerHTML;
+    const pw = window.open('', '_blank');
+    pw.document.write(`<html><head><title>Print QR - Table ${qrTableNumber}</title>
+      <style>body{font-family:sans-serif;text-align:center;padding:40px}
+      .box{border:2px dashed #ccc;padding:30px;display:inline-block;border-radius:20px}
+      h1{margin-top:20px;font-size:24px;color:#333}p{color:#666;font-size:14px}</style>
+      </head><body><div class="box">${content}<h1>TABLE ${qrTableNumber}</h1>
+      <p>Scan to Browse Menu & Order</p></div>
+      <script>window.onload=function(){window.print();window.close()}<\/script></body></html>`);
+    pw.document.close();
   };
+
+  const TABS = ['all', 'pending', 'preparing', 'completed', 'failed'];
+  const TAB_LABELS = { all: 'All', pending: 'Pending', preparing: 'Preparing', completed: 'Completed', failed: 'Failed' };
 
   return (
-    <div className="min-h-screen bg-dark-950 text-stone-200 pb-16">
+    <div className="min-h-screen bg-admin-hero text-stone-200 pb-16">
       
-      {/* Top Admin Navigation */}
-      <nav className="border-b border-stone-800/80 bg-dark-900/90 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2.5">
-              <div className="bg-amber-500 text-white p-2 rounded-xl">
-                <UtensilsCrossed size={18} />
+      {/* ─── Top Navigation ─── */}
+      <nav className="sticky top-0 z-40" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div className="glass-dark" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16 items-center">
+              {/* Brand */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Logo size={36} theme="dark" showText={false} />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 17, color: '#f5f5f0', letterSpacing: '-0.02em' }}>
+                      Servly
+                    </span>
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        color: '#1c1917', fontSize: 9, fontWeight: 800,
+                        padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.08em',
+                      }}
+                    >
+                      Admin
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 10, color: '#52525b', fontWeight: 500 }}>
+                    Dashboard Portal
+                  </p>
+                </div>
               </div>
-              <div>
-                <span className="font-bold text-lg font-display tracking-tight text-white">Servly Admin</span>
-                <span className="ml-2 bg-stone-800 text-amber-400 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm">Dashboard</span>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Auto-refresh indicator */}
+                {justRefreshed && (
+                  <span className="animate-fade-in" style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>
+                    ✓ Updated
+                  </span>
+                )}
+                <button
+                  id="refresh-orders-btn"
+                  onClick={() => fetchOrders()}
+                  disabled={refreshing}
+                  className="press-effect"
+                  style={{
+                    padding: 9, borderRadius: 999,
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex', color: '#71717a', transition: 'all 0.2s ease',
+                    opacity: refreshing ? 0.5 : 1,
+                  }}
+                  title="Refresh"
+                  onMouseEnter={e => e.currentTarget.style.color = '#f5f5f0'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#71717a'}
+                >
+                  <RefreshCw size={17} className={refreshing ? 'animate-spin-slow' : ''} />
+                </button>
+                <button
+                  id="go-to-menu-btn"
+                  onClick={() => setPage('menu')}
+                  className="press-effect"
+                  style={{
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    color: '#1c1917', fontWeight: 700, fontSize: 12,
+                    padding: '8px 18px', borderRadius: 999, border: 'none',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <span>Go to Menu</span>
+                  <ExternalLink size={12} />
+                </button>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => fetchOrders()}
-                disabled={refreshing}
-                className="p-2 hover:bg-stone-800 rounded-full transition-all text-stone-400 hover:text-white disabled:opacity-30"
-                title="Refresh Orders"
-              >
-                <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
-              </button>
-              <button
-                onClick={() => setPage('menu')}
-                className="text-xs bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold px-4 py-2 rounded-full transition-all flex items-center gap-1.5"
-              >
-                <span>Go to Menu</span>
-                <ExternalLink size={12} />
-              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Main Body */}
+      {/* ─── Main Body ─── */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        
-        {/* Error Handling */}
+
+        {/* Error Banner */}
         {error && (
-          <div className="bg-red-950/60 border border-red-800 text-red-200 p-4 rounded-2xl flex items-start gap-3 mb-6">
-            <AlertTriangle className="shrink-0 text-red-500" size={20} />
+          <div
+            className="animate-scale-in"
+            style={{
+              background: 'rgba(127,29,29,0.6)', backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(239,68,68,0.3)', borderRadius: 18,
+              padding: '14px 18px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24,
+            }}
+          >
+            <AlertTriangle size={18} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="font-semibold text-sm">Server Offline</p>
-              <p className="text-xs text-red-300/80 mt-1">{error}</p>
+              <p style={{ fontWeight: 700, fontSize: 13, color: '#fca5a5' }}>Server Offline</p>
+              <p style={{ fontSize: 12, color: '#fca5a5', opacity: 0.7, marginTop: 2 }}>{error}</p>
             </div>
           </div>
         )}
 
-        {/* Top KPI Statistics Grid */}
+        {/* KPI Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-dark-900 border border-stone-800/80 rounded-3xl p-5 flex items-center justify-between">
-            <div>
-              <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider">Total Revenue</p>
-              <h3 className="text-2xl font-bold font-display text-white mt-1.5">₱{totalRevenue.toFixed(2)}</h3>
-            </div>
-            <div className="bg-emerald-500/10 text-emerald-400 p-3 rounded-2xl">
-              <PhilippinePeso size={22} />
-            </div>
-          </div>
-
-          <div className="bg-dark-900 border border-stone-800/80 rounded-3xl p-5 flex items-center justify-between">
-            <div>
-              <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider">Active Orders</p>
-              <h3 className="text-2xl font-bold font-display text-white mt-1.5">{activeOrders.length}</h3>
-            </div>
-            <div className="bg-amber-500/10 text-amber-400 p-3 rounded-2xl">
-              <Clock size={22} />
-            </div>
-          </div>
-
-          <div className="bg-dark-900 border border-stone-800/80 rounded-3xl p-5 flex items-center justify-between">
-            <div>
-              <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider">Completed</p>
-              <h3 className="text-2xl font-bold font-display text-white mt-1.5">{completedOrders.length}</h3>
-            </div>
-            <div className="bg-blue-500/10 text-blue-400 p-3 rounded-2xl">
-              <CheckCircle size={22} />
-            </div>
-          </div>
-
-          <div className="bg-dark-900 border border-stone-800/80 rounded-3xl p-5 flex items-center justify-between">
-            <div>
-              <p className="text-stone-500 text-xs font-semibold uppercase tracking-wider">Failed / unpaid</p>
-              <h3 className="text-2xl font-bold font-display text-white mt-1.5">{failedOrders.length}</h3>
-            </div>
-            <div className="bg-red-500/10 text-red-400 p-3 rounded-2xl">
-              <AlertTriangle size={22} />
-            </div>
-          </div>
+          <StatCard label="Total Revenue"  value={`₱${totalRevenue.toFixed(0)}`} icon={PhilippinePeso} accent="#10b981" delay={0} />
+          <StatCard label="Active Orders"  value={activeOrders.length}           icon={Clock}          accent="#f59e0b" delay={60} />
+          <StatCard label="Completed"      value={completedOrders.length}        icon={CheckCircle}    accent="#3b82f6" delay={120} />
+          <StatCard label="Failed / Unpaid" value={failedOrders.length}          icon={AlertTriangle}  accent="#ef4444" delay={180} />
         </div>
 
-        {/* Sub-grid: Orders Manager (Left/Middle) and QR Code Generator (Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Sub-grid: Orders (2/3) + QR Generator (1/3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Orders Management Area (2 Columns wide on large screens) */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Search & Tabs Filtering */}
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+          {/* ── Orders Panel ── */}
+          <div className="lg:col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Search & Tabs */}
+            <div
+              className="glass-dark animate-fade-in-up"
+              style={{ borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+            >
               {/* Tab Filters */}
-              <div className="flex gap-1 overflow-x-auto pb-1 w-full sm:w-auto scrollbar-none">
-                {['all', 'pending', 'preparing', 'completed', 'failed'].map(tab => (
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                {TABS.map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-full text-xs font-semibold capitalize whitespace-nowrap transition-all duration-150 ${
-                      activeTab === tab
-                        ? 'bg-amber-500 text-stone-950 shadow-md'
-                        : 'bg-dark-900 text-stone-400 hover:text-white border border-stone-800'
-                    }`}
+                    className="press-effect"
+                    style={{
+                      padding: '7px 16px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                      whiteSpace: 'nowrap', flexShrink: 0, transition: 'all 0.2s ease',
+                      ...(activeTab === tab
+                        ? {
+                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            color: '#1c1917', border: 'none',
+                            boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
+                          }
+                        : {
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#71717a',
+                          }),
+                    }}
+                    onMouseEnter={e => { if (activeTab !== tab) e.currentTarget.style.color = '#f5f5f0'; }}
+                    onMouseLeave={e => { if (activeTab !== tab) e.currentTarget.style.color = '#71717a'; }}
                   >
-                    {tab === 'failed' ? 'Failed' : tab}
+                    {TAB_LABELS[tab]}
                   </button>
                 ))}
               </div>
 
-              {/* Search Box */}
-              <div className="relative w-full sm:w-64 shrink-0">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-500">
-                  <Search size={16} />
+              {/* Search */}
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', top: '50%', left: 12, transform: 'translateY(-50%)', color: '#52525b', pointerEvents: 'none' }}>
+                  <Search size={15} />
                 </span>
                 <input
                   type="text"
-                  placeholder="Search order or name..."
+                  placeholder="Search by name or order ID..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-dark-900 border border-stone-800 rounded-full py-2.5 pl-9 pr-4 text-white text-xs placeholder-stone-500 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="input-glass-dark"
+                  style={{ paddingLeft: 36, borderRadius: 12 }}
                 />
               </div>
             </div>
 
             {/* Orders Feed */}
             {loading ? (
-              <div className="text-center py-20 bg-dark-900 border border-stone-800 rounded-3xl">
-                <RefreshCw className="animate-spin text-amber-500 mx-auto mb-3" size={24} />
-                <p className="text-stone-400 text-sm">Loading incoming orders...</p>
+              <div
+                className="glass-dark animate-fade-in text-center"
+                style={{ borderRadius: 24, padding: '64px 32px' }}
+              >
+                <RefreshCw className="animate-spin-slow" size={28} style={{ color: '#f59e0b', margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 13, color: '#52525b' }}>Loading orders...</p>
               </div>
             ) : filteredOrders.length === 0 ? (
-              <div className="text-center py-20 bg-dark-900 border border-stone-800 rounded-3xl p-8">
-                <p className="text-stone-500 font-medium text-sm">No orders found in this category.</p>
+              <div
+                className="glass-dark animate-fade-in text-center"
+                style={{ borderRadius: 24, padding: '64px 32px' }}
+              >
+                <p style={{ fontSize: 13, color: '#52525b', fontWeight: 500 }}>
+                  No orders in this category.
+                </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredOrders.map(order => (
-                  <div 
-                    key={order.id} 
-                    className="bg-dark-900 border border-stone-800/80 rounded-3xl p-5 flex flex-col justify-between hover:border-stone-700/80 transition-all duration-200"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger">
+                {filteredOrders.map((order, index) => (
+                  <div
+                    key={order.id}
+                    className="glass-dark hover-lift hover-lift-dark card-shimmer animate-fade-in-up"
+                    style={{
+                      borderRadius: 22, padding: 20,
+                      display: 'flex', flexDirection: 'column', gap: 14,
+                      animationDelay: `${index * 40}ms`,
+                    }}
                   >
-                    <div>
-                      {/* Card Header */}
-                      <div className="flex justify-between items-start gap-2 border-b border-stone-800/60 pb-3">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold font-display text-white">Order #{order.id}</span>
-                            <span className="text-[10px] text-stone-500">
-                              {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1 text-stone-400">
-                            <User size={12} className="shrink-0" />
-                            <span className="text-xs font-medium truncate max-w-[140px]" title={order.customer_name}>
-                              {order.customer_name}
-                            </span>
-                          </div>
+                    {/* Card Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 14, color: '#f5f5f0' }}>
+                            #{order.id}
+                          </span>
+                          <span style={{ fontSize: 10, color: '#52525b' }}>
+                            {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-
-                        {/* Amount */}
-                        <div className="text-right">
-                          <span className="text-sm font-bold font-display text-amber-400">₱{Number(order.total_amount).toFixed(2)}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, color: '#71717a' }}>
+                          <User size={11} />
+                          <span style={{ fontSize: 12, fontWeight: 500, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {order.customer_name}
+                          </span>
                         </div>
                       </div>
-
-                      {/* Card Items */}
-                      <div className="py-4 space-y-2 max-h-36 overflow-y-auto pr-1 border-b border-stone-800/40">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs">
-                            <span className="text-stone-300">
-                              <strong className="text-amber-500/85">{item.quantity}x</strong> {item.name}
-                            </span>
-                            <span className="text-stone-500">₱{(item.price * item.quantity).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 16, color: '#f59e0b' }}>
+                        ₱{Number(order.total_amount).toFixed(2)}
+                      </span>
                     </div>
 
-                    {/* Status Modifiers */}
-                    <div className="pt-4 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
-                          Order Status
-                        </label>
-                        <select
-                          value={order.order_status}
-                          onChange={(e) => handleUpdateStatus(order.id, { order_status: e.target.value })}
-                          className={`w-full text-xs font-bold py-1.5 px-2.5 rounded-lg focus:outline-hidden transition-colors border ${
-                            order.order_status === 'completed'
-                              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/60'
-                              : order.order_status === 'preparing'
-                              ? 'bg-blue-950/40 text-blue-400 border-blue-800/60'
-                              : 'bg-stone-900 text-stone-300 border-stone-700'
-                          }`}
-                        >
-                          <option value="pending" className="bg-dark-900">Pending</option>
-                          <option value="preparing" className="bg-dark-900">Preparing</option>
-                          <option value="completed" className="bg-dark-900">Completed</option>
-                        </select>
-                      </div>
+                    {/* Items */}
+                    <div style={{ maxHeight: 120, overflowY: 'auto', paddingRight: 2 }} className="no-scrollbar">
+                      {order.items.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '4px 0' }}>
+                          <span style={{ color: '#a1a1aa' }}>
+                            <strong style={{ color: '#f59e0b', fontFamily: "'Outfit', sans-serif" }}>{item.quantity}×</strong>{' '}
+                            {item.name}
+                          </span>
+                          <span style={{ color: '#52525b', fontSize: 11 }}>₱{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
 
-                      <div>
-                        <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
-                          Payment
-                        </label>
-                        <select
-                          value={order.payment_status}
-                          onChange={(e) => handleUpdateStatus(order.id, { payment_status: e.target.value })}
-                          className={`w-full text-xs font-bold py-1.5 px-2.5 rounded-lg focus:outline-hidden transition-colors border ${
-                            order.payment_status === 'paid'
-                              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/60'
-                              : order.payment_status === 'failed'
-                              ? 'bg-red-950/40 text-red-400 border-red-800/60'
-                              : 'bg-stone-900 text-amber-500 border-stone-700'
-                          }`}
-                        >
-                          <option value="pending" className="bg-dark-900">Pending</option>
-                          <option value="paid" className="bg-dark-900">Paid</option>
-                          <option value="failed" className="bg-dark-900">Failed</option>
-                        </select>
-                      </div>
+                    {/* Status badges row */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <StatusDot status={order.order_status} type="order" />
+                      <StatusDot status={order.payment_status} type="payment" />
+                    </div>
+
+                    {/* Status Selects */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Order Status', key: 'order_status', val: order.order_status, opts: ['pending','preparing','completed'] },
+                        { label: 'Payment',      key: 'payment_status', val: order.payment_status, opts: ['pending','paid','failed'] },
+                      ].map(({ label, key, val, opts }) => (
+                        <div key={key}>
+                          <label style={{ display: 'block', fontSize: 9, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                            {label}
+                          </label>
+                          <select
+                            value={val}
+                            onChange={e => handleUpdateStatus(order.id, { [key]: e.target.value })}
+                            className="input-glass-dark"
+                            style={{
+                              padding: '8px 10px', fontSize: 12, fontWeight: 700, borderRadius: 10,
+                              ...(val === 'completed' || val === 'paid'
+                                ? { color: '#10b981', borderColor: 'rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.08)' }
+                                : val === 'preparing'
+                                ? { color: '#3b82f6', borderColor: 'rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.08)' }
+                                : val === 'failed'
+                                ? { color: '#ef4444', borderColor: 'rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)' }
+                                : { color: '#f59e0b', borderColor: 'rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.08)' }),
+                            }}
+                          >
+                            {opts.map(o => (
+                              <option key={o} value={o} style={{ background: '#0c0c0f', color: '#f5f5f0' }}>
+                                {o.charAt(0).toUpperCase() + o.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -377,19 +444,24 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
             )}
           </div>
 
-          {/* QR Code Utility Panel (1 Column wide) */}
-          <div className="bg-dark-900 border border-stone-800/80 rounded-3xl p-6 h-fit space-y-6">
+          {/* ── QR Code Panel ── */}
+          <div
+            className="glass-dark animate-fade-in-up h-fit"
+            style={{ borderRadius: 24, padding: 24, display: 'flex', flexDirection: 'column', gap: 20, animationDelay: '200ms' }}
+          >
             <div>
-              <h2 className="text-base font-bold font-display text-white">QR Code Generator</h2>
-              <p className="text-stone-500 text-xs mt-1 leading-relaxed">
-                Generate and print secure ordering QR codes for your restaurant tables.
+              <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 17, color: '#f5f5f0' }}>
+                QR Generator
+              </h2>
+              <p style={{ fontSize: 12, color: '#52525b', marginTop: 4, lineHeight: 1.5 }}>
+                Create ordering QR codes for each table.
               </p>
             </div>
 
-            {/* Input fields */}
+            {/* Table Input */}
             <div>
-              <label htmlFor="qr-table" className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-2">
-                Table Identifier
+              <label htmlFor="qr-table" style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                Table Number
               </label>
               <input
                 id="qr-table"
@@ -397,54 +469,103 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                 min="1"
                 placeholder="e.g. 5"
                 value={qrTableNumber}
-                onChange={(e) => setQrTableNumber(e.target.value)}
-                className="w-full bg-dark-950 border border-stone-800 rounded-xl py-3 px-4 text-white placeholder-stone-600 focus:outline-hidden focus:border-amber-500 transition-all text-sm font-semibold"
+                onChange={e => setQrTableNumber(e.target.value)}
+                className="input-glass-dark"
               />
             </div>
 
-            {/* QR Card Container */}
-            <div className="bg-dark-950 border border-stone-800 rounded-2xl p-6 flex flex-col items-center justify-center">
-              
-              {/* This div serves as the printable canvas wrapper */}
-              <div id="qr-print-area" className="bg-white p-4 rounded-xl flex items-center justify-center">
+            {/* QR Preview Card */}
+            <div
+              style={{
+                background: 'rgba(5,5,7,0.5)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 18, padding: 24,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+              }}
+            >
+              <div
+                id="qr-print-area"
+                style={{
+                  background: '#fff', borderRadius: 16, padding: 16,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                }}
+              >
                 {qrGeneratedUrl && (
-                  <QRCodeSVG 
+                  <QRCodeSVG
                     id="qr-code-svg"
                     value={qrGeneratedUrl}
-                    size={180}
+                    size={160}
                     bgColor="#FFFFFF"
-                    fgColor="#1C1917"
+                    fgColor="#1c1917"
                     level="H"
-                    includeMargin={true}
+                    includeMargin={false}
                   />
                 )}
               </div>
 
-              {/* Show encoded text as verification helper */}
-              <span className="text-[10px] text-stone-500 select-all truncate max-w-full text-center mt-4">
+              {/* Table label pill */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.08))',
+                  border: '1px solid rgba(245,158,11,0.25)',
+                  borderRadius: 999, padding: '6px 18px',
+                  fontSize: 13, fontWeight: 700, color: '#f59e0b',
+                  fontFamily: "'Outfit', sans-serif",
+                }}
+              >
+                Table {qrTableNumber}
+              </div>
+
+              <p
+                className="no-scrollbar"
+                style={{
+                  fontSize: 10, color: '#3f3f46', textAlign: 'center',
+                  wordBreak: 'break-all', maxWidth: '100%',
+                  userSelect: 'all',
+                }}
+              >
                 {qrGeneratedUrl}
-              </span>
+              </p>
             </div>
 
-            {/* Actions for QR */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            {/* QR Actions */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <button
+                id="download-qr-btn"
                 onClick={downloadQRCode}
-                className="flex items-center justify-center gap-1.5 bg-stone-800 hover:bg-stone-750 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors border border-stone-700 shadow-xs"
+                className="press-effect"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#a1a1aa', fontWeight: 600, fontSize: 12,
+                  padding: '11px 14px', borderRadius: 14, transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#f5f5f0'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#a1a1aa'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
               >
                 <Download size={14} />
                 <span>Download</span>
               </button>
               <button
+                id="print-qr-btn"
                 onClick={printQRCode}
-                className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold py-2.5 rounded-xl text-xs transition-colors shadow-xs"
+                className="press-effect"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  color: '#1c1917', fontWeight: 700, fontSize: 12,
+                  padding: '11px 14px', borderRadius: 14, border: 'none',
+                  boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
+                  transition: 'all 0.2s ease',
+                }}
               >
                 <Printer size={14} />
                 <span>Print</span>
               </button>
             </div>
           </div>
-          
+
         </div>
       </main>
     </div>
