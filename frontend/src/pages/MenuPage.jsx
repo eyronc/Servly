@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ShoppingBag, AlertCircle, Sparkles } from 'lucide-react';
+import { Search, ShoppingBag, AlertCircle, ChevronRight } from 'lucide-react';
+import Logo from '../components/Logo';
 
 export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNumber }) {
   const [products, setProducts] = useState([]);
@@ -8,6 +9,7 @@ export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNu
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [addedIds, setAddedIds] = useState({}); // track which items were just added
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -23,86 +25,117 @@ export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNu
         setLoading(false);
       }
     };
-
     fetchProducts();
   }, [apiBaseUrl]);
 
-  // Categories extraction
   const categories = ['All', ...new Set(products.map(p => p.category))];
 
-  // Filtering products
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const handleAddToCart = (product) => {
+    addToCart(product);
+    setAddedIds(prev => ({ ...prev, [product.id]: true }));
+    setTimeout(() => setAddedIds(prev => ({ ...prev, [product.id]: false })), 900);
+  };
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-28">
-      {/* Header Banner */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-stone-200/80 shadow-xs">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-amber-500 text-white p-2 rounded-xl shadow-md">
-              <Sparkles size={20} className="animate-pulse" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold font-display text-stone-900 tracking-tight leading-none">Servly</h1>
-              <p className="text-xs text-stone-500 mt-1">Bespoke Dining Experience</p>
-            </div>
+    <div className="min-h-screen bg-menu-hero pb-32">
+      {/* ─── Sticky Header ─── */}
+      <header className="sticky top-0 z-40">
+        <div className="glass border-b border-white/40 shadow-sm">
+          <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
+            <Logo size={36} theme="light" />
+
+            {tableNumber && (
+              <div
+                className="glass-amber px-4 py-1.5 rounded-full text-xs font-bold tracking-wide animate-float"
+                style={{ color: '#b45309' }}
+              >
+                🪑 Table {tableNumber}
+              </div>
+            )}
           </div>
-          {tableNumber && (
-            <div className="bg-amber-50 border border-amber-200/60 px-3 py-1 rounded-full text-xs font-semibold text-amber-800">
-              Table {tableNumber}
-            </div>
-          )}
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-4xl mx-auto px-4 mt-6">
-        {/* Welcome Section */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-stone-950 font-display">Welcome to our Table</h2>
-          <p className="text-stone-500 text-sm mt-1">Select from our signature hand-crafted culinary items below.</p>
+      {/* ─── Main ─── */}
+      <main className="max-w-4xl mx-auto px-4 mt-8">
+        {/* Welcome Hero */}
+        <div className="mb-8 animate-fade-in-up">
+          <h2
+            className="text-3xl font-bold"
+            style={{ fontFamily: "'Outfit', sans-serif", color: '#0c0c0f', letterSpacing: '-0.03em' }}
+          >
+            Welcome to our Table
+          </h2>
+          <p className="text-sm mt-2" style={{ color: '#78716c' }}>
+            Explore our hand-crafted culinary creations — order with ease.
+          </p>
         </div>
 
         {/* Search Bar */}
-        <div className="relative mb-6">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-stone-400">
-            <Search size={18} />
+        <div className="relative mb-6 animate-fade-in-up" style={{ animationDelay: '60ms' }}>
+          <span className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none" style={{ color: '#a8a29e' }}>
+            <Search size={17} />
           </span>
           <input
             type="text"
-            placeholder="Search for dishes, desserts, drinks..."
+            placeholder="Search dishes, drinks, desserts..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border border-stone-200 rounded-2xl py-3 pl-10 pr-4 text-stone-900 placeholder-stone-400 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all shadow-xs"
+            onChange={e => setSearchTerm(e.target.value)}
+            className="input-glass"
+            style={{ paddingLeft: 44, borderRadius: 999 }}
           />
         </div>
 
-        {/* Categories Horizontal Scroll */}
+        {/* Category Pills */}
         {loading ? (
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar">
             {[1, 2, 3, 4].map(n => (
-              <div key={n} className="h-9 w-20 bg-stone-200 animate-pulse rounded-full" />
+              <div key={n} className="skeleton h-8 w-20 rounded-full shrink-0" />
             ))}
           </div>
         ) : (
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+          <div
+            className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar stagger animate-fade-in-up"
+            style={{ animationDelay: '100ms' }}
+          >
             {categories.map(category => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                  selectedCategory === category
-                    ? 'bg-stone-900 text-white shadow-md'
-                    : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
-                }`}
+                className="press-effect"
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  transition: 'all 0.2s ease',
+                  ...(selectedCategory === category
+                    ? {
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        color: '#1c1917',
+                        border: 'none',
+                        boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
+                      }
+                    : {
+                        background: 'rgba(255,255,255,0.7)',
+                        backdropFilter: 'blur(8px)',
+                        color: '#57534e',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                      }),
+                }}
               >
                 {category}
               </button>
@@ -110,90 +143,214 @@ export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNu
           </div>
         )}
 
-        {/* Error Handling */}
+        {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-2xl flex items-start gap-3 my-8">
-            <AlertCircle className="shrink-0 text-red-600" size={20} />
+          <div
+            className="animate-scale-in flex items-start gap-3 mb-8 p-4"
+            style={{
+              background: 'rgba(254,242,242,0.85)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid rgba(252,165,165,0.5)',
+              borderRadius: 20,
+            }}
+          >
+            <AlertCircle size={18} style={{ color: '#dc2626', flexShrink: 0, marginTop: 1 }} />
             <div>
-              <p className="font-semibold text-sm">Offline Mode</p>
-              <p className="text-xs text-red-700/80 mt-1">{error}</p>
+              <p style={{ fontWeight: 700, fontSize: 13, color: '#dc2626' }}>Offline Mode</p>
+              <p style={{ fontSize: 12, color: '#b91c1c', marginTop: 2 }}>{error}</p>
             </div>
           </div>
         )}
 
-        {/* Products Listing */}
+        {/* Products Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map(n => (
-              <div key={n} className="bg-white border border-stone-100 rounded-3xl p-4 flex gap-4 animate-pulse">
-                <div className="w-24 h-24 bg-stone-200 rounded-2xl shrink-0" />
-                <div className="flex-1 py-1">
-                  <div className="h-4 bg-stone-200 rounded-sm w-3/4 mb-2" />
-                  <div className="h-3 bg-stone-200 rounded-sm w-full mb-1" />
-                  <div className="h-3 bg-stone-200 rounded-sm w-5/6 mb-3" />
-                  <div className="h-5 bg-stone-200 rounded-sm w-1/4" />
+              <div
+                key={n}
+                className="glass p-4 flex gap-4"
+                style={{ borderRadius: 24 }}
+              >
+                <div className="skeleton w-24 h-24 shrink-0" style={{ borderRadius: 18 }} />
+                <div className="flex-1 py-1 flex flex-col gap-2">
+                  <div className="skeleton h-4 w-3/4" />
+                  <div className="skeleton h-3 w-full" />
+                  <div className="skeleton h-3 w-5/6" />
+                  <div className="skeleton h-5 w-1/4 mt-auto" />
                 </div>
               </div>
             ))}
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-3xl border border-stone-200/80 p-8 shadow-xs">
-            <p className="text-stone-400 font-medium text-sm">No items found matching your search</p>
+          <div
+            className="glass text-center py-16 animate-fade-in"
+            style={{ borderRadius: 28 }}
+          >
+            <p style={{ color: '#a8a29e', fontWeight: 500, fontSize: 14 }}>
+              No items match your search
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredProducts.map(product => (
-              <div
-                key={product.id}
-                className="bg-white border border-stone-200/80 rounded-3xl p-4 flex gap-4 hover-lift hover:shadow-lg transition-all duration-300"
-              >
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="w-24 h-24 rounded-2xl object-cover bg-stone-100 shrink-0 border border-stone-100"
-                />
-                <div className="flex flex-col justify-between flex-1">
-                  <div>
-                    <h3 className="font-bold text-stone-900 text-base font-display">{product.name}</h3>
-                    <p className="text-stone-500 text-xs mt-1 line-clamp-2 leading-relaxed">
-                      {product.description}
-                    </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger">
+            {filteredProducts.map(product => {
+              const justAdded = addedIds[product.id];
+              return (
+                <div
+                  key={product.id}
+                  className="glass hover-lift card-shimmer animate-fade-in-up flex gap-4 p-4"
+                  style={{ borderRadius: 24 }}
+                >
+                  {/* Product Image */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      className="w-24 h-24 object-cover"
+                      style={{
+                        borderRadius: 18,
+                        border: '1.5px solid rgba(255,255,255,0.6)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                      }}
+                    />
+                    {product.category && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: -6,
+                          left: -6,
+                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                          color: '#1c1917',
+                          fontSize: 9,
+                          fontWeight: 700,
+                          padding: '2px 7px',
+                          borderRadius: 999,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          boxShadow: '0 2px 8px rgba(245,158,11,0.35)',
+                        }}
+                      >
+                        {product.category}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="font-bold text-stone-950 font-display">₱{Number(product.price).toFixed(2)}</span>
-                    <button
-                      onClick={() => addToCart(product)}
-                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-full transition-all duration-150 active:scale-95 shadow-xs"
-                    >
-                      Add to Cart
-                    </button>
+
+                  {/* Content */}
+                  <div className="flex flex-col justify-between flex-1 min-w-0">
+                    <div>
+                      <h3
+                        style={{
+                          fontFamily: "'Outfit', sans-serif",
+                          fontWeight: 700,
+                          fontSize: 15,
+                          color: '#0c0c0f',
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {product.name}
+                      </h3>
+                      <p
+                        className="line-clamp-2"
+                        style={{ fontSize: 12, color: '#78716c', marginTop: 4, lineHeight: 1.5 }}
+                      >
+                        {product.description}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between mt-3">
+                      <span
+                        style={{
+                          fontFamily: "'Outfit', sans-serif",
+                          fontWeight: 800,
+                          fontSize: 16,
+                          color: '#0c0c0f',
+                        }}
+                      >
+                        ₱{Number(product.price).toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => handleAddToCart(product)}
+                        className="press-effect"
+                        style={{
+                          background: justAdded
+                            ? 'linear-gradient(135deg, #10b981, #059669)'
+                            : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                          color: justAdded ? '#fff' : '#1c1917',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          padding: '7px 16px',
+                          borderRadius: 999,
+                          border: 'none',
+                          transition: 'all 0.25s var(--transition-spring)',
+                          boxShadow: justAdded
+                            ? '0 4px 14px rgba(16,185,129,0.35)'
+                            : '0 4px 14px rgba(245,158,11,0.3)',
+                          transform: justAdded ? 'scale(1.05)' : 'scale(1)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {justAdded ? '✓ Added!' : '+ Add'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar for Mobile/Tablet */}
+      {/* ─── Floating Cart Bar ─── */}
       {cartItemCount > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-lg z-50 animate-bounce-subtle">
+        <div
+          className="fixed bottom-6 z-50 animate-bounce-cart"
+          style={{
+            left: '50%',
+            width: '90%',
+            maxWidth: 480,
+            transform: 'translateX(-50%)',
+          }}
+        >
           <button
+            id="view-cart-btn"
             onClick={() => setPage('cart')}
-            className="w-full bg-stone-900 hover:bg-stone-950 text-white px-5 py-4 rounded-full flex items-center justify-between shadow-2xl transition-all duration-150 active:scale-98"
+            className="w-full press-effect"
+            style={{
+              background: 'linear-gradient(135deg, #1e1e2a 0%, #0c0c0f 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(16px)',
+              borderRadius: 999,
+              padding: '14px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)',
+            }}
           >
-            <div className="flex items-center gap-3">
-              <div className="bg-amber-500 text-white p-2 rounded-full">
-                <ShoppingBag size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                className="animate-pulse-glow"
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  borderRadius: 999,
+                  padding: 9,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <ShoppingBag size={17} color="#1c1917" />
               </div>
-              <div className="text-left">
-                <p className="text-xs text-stone-400 font-medium">View Cart</p>
-                <p className="text-sm font-bold font-display">{cartItemCount} {cartItemCount === 1 ? 'item' : 'items'}</p>
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ fontSize: 11, color: '#71717a', fontWeight: 500 }}>View Basket</p>
+                <p style={{ fontSize: 14, color: '#fff', fontWeight: 700, fontFamily: "'Outfit', sans-serif" }}>
+                  {cartItemCount} {cartItemCount === 1 ? 'item' : 'items'}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-stone-400 text-xs">Total:</span>
-              <span className="font-bold font-display text-lg text-amber-400">₱{cartTotal.toFixed(2)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 18, color: '#f59e0b' }}>
+                ₱{cartTotal.toFixed(2)}
+              </span>
+              <ChevronRight size={18} color="#71717a" />
             </div>
           </button>
         </div>

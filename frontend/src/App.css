@@ -1,1 +1,4 @@
-/* Emptied to prevent conflicts. All styles are declared in index.css with Tailwind CSS. */
+/* App-level overrides — global styles live in index.css */
+#root {
+  min-height: 100vh;
+}

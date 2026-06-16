@@ -1,27 +1,22 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, CreditCard, ShieldCheck, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import Logo from '../components/Logo';
 
 export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tableNumber, setTableNumber }) {
   const [customerName, setCustomerName] = useState('');
   const [tableInput, setTableInput] = useState(tableNumber || '');
   const [isSimulating, setIsSimulating] = useState(false);
-  const [simulatedState, setSimulatedState] = useState(null); // 'processing', 'success', 'failure'
+  const [simulatedState, setSimulatedState] = useState(null);
   const [orderResponse, setOrderResponse] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const handleStartPayment = (e) => {
     e.preventDefault();
-    if (!customerName.trim()) {
-      setErrorMessage('Please enter your name.');
-      return;
-    }
-    if (!tableInput) {
-      setErrorMessage('Please specify your table number.');
-      return;
-    }
+    if (!customerName.trim()) { setErrorMessage('Please enter your name.'); return; }
+    if (!tableInput) { setErrorMessage('Please specify your table number.'); return; }
     setErrorMessage('');
     setTableNumber(tableInput);
     setIsSimulating(true);
@@ -30,233 +25,348 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
 
   const handleSimulatePaymentOutcome = async (outcome) => {
     setSimulatedState('submitting');
-    
-    // Map cart items into db compatible structure
-    const orderItems = cart.map(item => ({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity
-    }));
-
+    const orderItems = cart.map(item => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity }));
     try {
       const orderData = {
         customer_name: `${customerName} (Table ${tableInput})`,
         items: orderItems,
         total_amount: cartTotal,
         payment_status: outcome === 'success' ? 'paid' : 'failed',
-        order_status: 'pending'
+        order_status: 'pending',
       };
-
       const response = await axios.post(`${apiBaseUrl}/api/orders`, orderData);
       setOrderResponse(response.data);
-
-      if (outcome === 'success') {
-        setSimulatedState('success');
-        clearCart();
-      } else {
-        setSimulatedState('failure');
-      }
+      if (outcome === 'success') { setSimulatedState('success'); clearCart(); }
+      else { setSimulatedState('failure'); }
     } catch (err) {
-      console.error('Error submitting simulated order:', err);
-      setErrorMessage('Network error occurred. Order could not be created in the database.');
+      console.error('Error submitting order:', err);
+      setErrorMessage('Network error. Order could not be recorded.');
       setSimulatedState(null);
       setIsSimulating(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-12">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-stone-200/80">
-        <div className="max-w-xl mx-auto px-4 py-4 flex items-center gap-4">
-          <button
-            onClick={() => setPage('cart')}
-            disabled={isSimulating}
-            className="p-2 hover:bg-stone-100 rounded-full transition-colors text-stone-600 disabled:opacity-30"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="text-xl font-bold font-display text-stone-900">Checkout</h1>
+    <div className="min-h-screen bg-menu-hero pb-12">
+      {/* ─── Header ─── */}
+      <header className="sticky top-0 z-40">
+        <div className="glass border-b border-white/40 shadow-sm">
+          <div className="max-w-xl mx-auto px-4 py-3.5 flex items-center gap-3">
+            <button
+              id="checkout-back-btn"
+              onClick={() => setPage('cart')}
+              disabled={isSimulating}
+              className="press-effect"
+              style={{
+                padding: 8, borderRadius: 999,
+                background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.07)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#57534e', flexShrink: 0,
+                opacity: isSimulating ? 0.4 : 1,
+              }}
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <Logo size={32} theme="light" />
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-xl mx-auto px-4 mt-6">
-        <div className="flex flex-col gap-6">
-          
-          {/* Order Details Form */}
-          <form onSubmit={handleStartPayment} className="bg-white border border-stone-200/80 rounded-3xl p-5 shadow-xs flex flex-col gap-4">
-            <h2 className="text-base font-bold text-stone-900 font-display">Customer Details</h2>
-            
+      <main className="max-w-xl mx-auto px-4 mt-8">
+        <div className="mb-6 animate-fade-in-up">
+          <h1 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 26, color: '#0c0c0f', letterSpacing: '-0.03em' }}>
+            Checkout
+          </h1>
+          <p style={{ fontSize: 13, color: '#78716c', marginTop: 4 }}>
+            Fill in your details and simulate a payment to place your order.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* ── Customer Details Form ── */}
+          <form
+            onSubmit={handleStartPayment}
+            className="glass animate-fade-in-up"
+            style={{ borderRadius: 24, padding: 24 }}
+          >
+            <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 16, color: '#0c0c0f', marginBottom: 16 }}>
+              Customer Details
+            </h2>
+
             {errorMessage && (
-              <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3 py-2 rounded-xl">
+              <div
+                className="animate-scale-in"
+                style={{
+                  background: 'rgba(254,242,242,0.9)', border: '1px solid rgba(252,165,165,0.5)',
+                  borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#dc2626',
+                  fontWeight: 500, marginBottom: 14,
+                }}
+              >
                 {errorMessage}
               </div>
             )}
 
-            <div>
-              <label htmlFor="customer-name" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
-                Your Name
-              </label>
-              <input
-                id="customer-name"
-                type="text"
-                required
-                placeholder="Enter your name"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-stone-900 placeholder-stone-400 focus:outline-hidden focus:border-amber-500 focus:bg-white transition-all text-sm font-medium"
-              />
-            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label
+                  htmlFor="customer-name"
+                  style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}
+                >
+                  Your Name
+                </label>
+                <input
+                  id="customer-name"
+                  type="text"
+                  required
+                  placeholder="Enter your name"
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  className="input-glass"
+                />
+              </div>
 
-            <div>
-              <label htmlFor="table-number" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
-                Table Number
-              </label>
-              <input
-                id="table-number"
-                type="number"
-                required
-                placeholder="e.g. 5"
-                value={tableInput}
-                onChange={(e) => setTableInput(e.target.value)}
-                className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 text-stone-900 placeholder-stone-400 focus:outline-hidden focus:border-amber-500 focus:bg-white transition-all text-sm font-medium"
-              />
+              <div>
+                <label
+                  htmlFor="table-number"
+                  style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}
+                >
+                  Table Number
+                </label>
+                <input
+                  id="table-number"
+                  type="number"
+                  required
+                  placeholder="e.g. 5"
+                  value={tableInput}
+                  onChange={e => setTableInput(e.target.value)}
+                  className="input-glass"
+                />
+              </div>
+
+              <button
+                type="submit"
+                id="proceed-payment-btn"
+                className="btn-dark w-full"
+                style={{ marginTop: 4 }}
+              >
+                <CreditCard size={17} />
+                <span>Proceed to Payment</span>
+              </button>
             </div>
-            
-            <button
-              type="submit"
-              className="mt-2 bg-stone-900 hover:bg-stone-950 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-            >
-              <CreditCard size={18} />
-              <span>Proceed to Payment Simulation</span>
-            </button>
           </form>
 
-          {/* Checkout Summary */}
-          <div className="bg-white border border-stone-200/80 rounded-3xl p-5 shadow-xs flex flex-col gap-4">
-            <h2 className="text-base font-bold text-stone-900 font-display">Order Summary</h2>
-            <div className="divide-y divide-stone-100 max-h-48 overflow-y-auto pr-1">
-              {cart.map(item => (
-                <div key={item.id} className="py-3 flex justify-between items-center text-sm">
+          {/* ── Order Summary ── */}
+          <div
+            className="glass animate-fade-in-up"
+            style={{ borderRadius: 24, padding: 24, animationDelay: '60ms' }}
+          >
+            <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 16, color: '#0c0c0f', marginBottom: 16 }}>
+              Order Summary
+            </h2>
+
+            <div style={{ maxHeight: 200, overflowY: 'auto', paddingRight: 4 }} className="no-scrollbar">
+              {cart.map((item, index) => (
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '11px 0', fontSize: 13,
+                    borderBottom: index < cart.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
+                  }}
+                >
                   <div>
-                    <span className="font-bold text-stone-900 font-display">{item.quantity}x</span>
-                    <span className="text-stone-700 ml-2 font-medium">{item.name}</span>
+                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, color: '#d97706' }}>{item.quantity}×</span>
+                    <span style={{ color: '#3d3d3d', fontWeight: 500, marginLeft: 6 }}>{item.name}</span>
                   </div>
-                  <span className="font-semibold text-stone-900">₱{(item.price * item.quantity).toFixed(2)}</span>
+                  <span style={{ fontWeight: 600, color: '#0c0c0f' }}>
+                    ₱{(item.price * item.quantity).toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
-            <div className="border-t border-stone-100 pt-4 flex justify-between items-center">
-              <span className="text-base font-bold text-stone-900">Total</span>
-              <span className="text-xl font-bold font-display text-stone-950">₱{cartTotal.toFixed(2)}</span>
+
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.07)', paddingTop: 14, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: '#0c0c0f' }}>Total</span>
+              <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 22, color: '#0c0c0f' }}>
+                ₱{cartTotal.toFixed(2)}
+              </span>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Payment Simulation Modal overlay */}
+      {/* ─── Payment Simulation Modal ─── */}
       {isSimulating && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 border border-stone-200 shadow-2xl relative overflow-hidden animate-scale-up">
-            
-            {/* Simulation Header */}
-            <div className="text-center mb-6">
-              <span className="bg-stone-100 px-3 py-1 rounded-full text-xs font-semibold text-stone-500 border border-stone-200">
-                Servly Payment Sandbox
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+          style={{ background: 'rgba(5,5,7,0.7)', backdropFilter: 'blur(16px)' }}
+        >
+          <div
+            className="glass animate-scale-in w-full relative overflow-hidden"
+            style={{ maxWidth: 420, borderRadius: 28, padding: 32 }}
+          >
+            {/* Brand badge */}
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <span
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+                  borderRadius: 999, padding: '5px 14px',
+                  fontSize: 11, fontWeight: 700, color: '#b45309', letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                🔒 Servly Payment Sandbox
               </span>
             </div>
 
-            {/* PROCESSING STATE */}
+            {/* PROCESSING */}
             {simulatedState === 'processing' && (
-              <div className="text-center py-6">
-                <Loader2 size={48} className="text-amber-500 animate-spin mx-auto mb-4" />
-                <h3 className="text-lg font-bold font-display text-stone-900">Simulating Payment Gateway</h3>
-                <p className="text-stone-500 text-xs mt-2 px-6 leading-relaxed">
-                  Choose how you would like the bank to respond to this transaction request of <strong className="text-stone-800">₱{cartTotal.toFixed(2)}</strong>.
+              <div className="text-center animate-fade-in">
+                <div
+                  style={{
+                    width: 72, height: 72, borderRadius: 999, margin: '0 auto 20px',
+                    background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.1))',
+                    border: '2px solid rgba(245,158,11,0.3)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <CreditCard size={30} style={{ color: '#d97706' }} />
+                </div>
+                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 20, color: '#0c0c0f' }}>
+                  Payment Gateway
+                </h3>
+                <p style={{ fontSize: 13, color: '#78716c', marginTop: 8, marginBottom: 24, lineHeight: 1.6 }}>
+                  Simulating a transaction of{' '}
+                  <strong style={{ color: '#0c0c0f' }}>₱{cartTotal.toFixed(2)}</strong>.
+                  <br />Choose the bank's response:
                 </p>
-                <div className="flex flex-col gap-3 mt-8">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button
+                    id="simulate-success-btn"
                     onClick={() => handleSimulatePaymentOutcome('success')}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors shadow-xs"
+                    className="press-effect"
+                    style={{
+                      background: 'linear-gradient(135deg, #059669, #047857)',
+                      color: '#fff', fontWeight: 700, fontSize: 14,
+                      padding: '14px 28px', borderRadius: 16, border: 'none',
+                      boxShadow: '0 4px 16px rgba(5,150,105,0.35)',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
-                    Simulate Success (Paid)
+                    ✓ Simulate Success (Paid)
                   </button>
                   <button
+                    id="simulate-failure-btn"
                     onClick={() => handleSimulatePaymentOutcome('failure')}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors shadow-xs"
+                    className="press-effect"
+                    style={{
+                      background: 'rgba(239,68,68,0.08)', color: '#dc2626', fontWeight: 700, fontSize: 14,
+                      padding: '14px 28px', borderRadius: 16,
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
-                    Simulate Failure (Declined)
+                    ✕ Simulate Failure (Declined)
                   </button>
                 </div>
               </div>
             )}
 
-            {/* SUBMITTING STATE */}
+            {/* SUBMITTING */}
             {simulatedState === 'submitting' && (
-              <div className="text-center py-12">
-                <Loader2 size={40} className="text-stone-900 animate-spin mx-auto mb-4" />
-                <p className="text-sm font-semibold text-stone-700">Recording order transaction in database...</p>
+              <div className="text-center py-8 animate-fade-in">
+                <Loader2 size={40} className="animate-spin-slow" style={{ color: '#d97706', margin: '0 auto 16px' }} />
+                <p style={{ fontWeight: 600, fontSize: 14, color: '#57534e' }}>
+                  Recording transaction...
+                </p>
               </div>
             )}
 
-            {/* SUCCESS STATE */}
+            {/* SUCCESS */}
             {simulatedState === 'success' && (
-              <div className="text-center py-6 animate-fade-in">
-                <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 size={36} />
+              <div className="text-center animate-scale-in">
+                <div
+                  style={{
+                    width: 80, height: 80, borderRadius: 999, margin: '0 auto 20px',
+                    background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08))',
+                    border: '2px solid rgba(16,185,129,0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <CheckCircle2 size={38} style={{ color: '#10b981' }} />
                 </div>
-                <h3 className="text-xl font-bold font-display text-stone-900">Order Placed Successfully!</h3>
-                <p className="text-stone-500 text-xs mt-2 px-6">
-                  Thank you! Your payment succeeded. Order <span className="font-semibold text-stone-700">#{orderResponse?.orderId}</span> is now being prepared.
+                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 22, color: '#0c0c0f' }}>
+                  Order Placed! 🎉
+                </h3>
+                <p style={{ fontSize: 13, color: '#78716c', marginTop: 8 }}>
+                  Payment succeeded. Order{' '}
+                  <span style={{ fontWeight: 700, color: '#0c0c0f' }}>#{orderResponse?.orderId}</span>{' '}
+                  is being prepared.
                 </p>
-                <div className="bg-stone-50 border border-stone-100 rounded-2xl p-4 my-6 text-left text-xs text-stone-600 space-y-1.5 max-w-xs mx-auto">
-                  <div className="flex justify-between"><span>Customer:</span><span className="font-semibold text-stone-900">{customerName}</span></div>
-                  <div className="flex justify-between"><span>Table:</span><span className="font-semibold text-stone-900">{tableInput}</span></div>
-                  <div className="flex justify-between"><span>Amount:</span><span className="font-semibold text-stone-900">₱{cartTotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Payment:</span><span className="font-semibold text-emerald-600 uppercase">Paid</span></div>
+                <div
+                  style={{
+                    margin: '20px 0', padding: 16, borderRadius: 16,
+                    background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.07)',
+                    textAlign: 'left',
+                  }}
+                >
+                  {[
+                    ['Customer', customerName],
+                    ['Table', tableInput],
+                    ['Amount', `₱${cartTotal.toFixed(2)}`],
+                    ['Status', 'Paid ✓'],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '5px 0', borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                      <span style={{ color: '#78716c' }}>{label}</span>
+                      <span style={{ fontWeight: 700, color: label === 'Status' ? '#059669' : '#0c0c0f' }}>{value}</span>
+                    </div>
+                  ))}
                 </div>
                 <button
-                  onClick={() => {
-                    setIsSimulating(false);
-                    setSimulatedState(null);
-                    setPage('menu');
-                  }}
-                  className="w-full bg-stone-900 hover:bg-stone-950 text-white font-semibold py-3 rounded-xl text-sm transition-colors shadow-xs"
+                  id="order-again-btn"
+                  onClick={() => { setIsSimulating(false); setSimulatedState(null); setPage('menu'); }}
+                  className="btn-dark w-full"
                 >
                   Order Something Else
                 </button>
               </div>
             )}
 
-            {/* FAILURE STATE */}
+            {/* FAILURE */}
             {simulatedState === 'failure' && (
-              <div className="text-center py-6 animate-fade-in">
-                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <XCircle size={36} />
+              <div className="text-center animate-scale-in">
+                <div
+                  style={{
+                    width: 80, height: 80, borderRadius: 999, margin: '0 auto 20px',
+                    background: 'rgba(254,242,242,0.9)', border: '2px solid rgba(252,165,165,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <XCircle size={38} style={{ color: '#ef4444' }} />
                 </div>
-                <h3 className="text-xl font-bold font-display text-stone-900">Transaction Declined</h3>
-                <p className="text-stone-500 text-xs mt-2 px-6">
-                  Your mock payment failed. The order has been logged in the database as <span className="font-semibold text-red-600">Failed</span>.
+                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 22, color: '#0c0c0f' }}>
+                  Transaction Declined
+                </h3>
+                <p style={{ fontSize: 13, color: '#78716c', marginTop: 8, marginBottom: 24 }}>
+                  Your mock payment failed. The order was logged as{' '}
+                  <span style={{ fontWeight: 700, color: '#ef4444' }}>Failed</span>.
                 </p>
-                
-                <div className="flex flex-col gap-3 mt-8">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button
-                    onClick={() => {
-                      setSimulatedState('processing');
-                    }}
-                    className="w-full bg-stone-900 hover:bg-stone-950 text-white font-semibold py-3.5 rounded-xl text-sm transition-colors shadow-xs"
+                    onClick={() => setSimulatedState('processing')}
+                    className="btn-dark w-full"
                   >
                     Try Again
                   </button>
                   <button
-                    onClick={() => {
-                      setIsSimulating(false);
-                      setSimulatedState(null);
-                      setPage('cart');
+                    onClick={() => { setIsSimulating(false); setSimulatedState(null); setPage('cart'); }}
+                    className="press-effect"
+                    style={{
+                      padding: '12px 28px', borderRadius: 14, fontWeight: 600, fontSize: 13,
+                      background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)',
+                      color: '#57534e',
                     }}
-                    className="w-full bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold py-3 rounded-xl text-sm transition-colors border border-stone-200"
                   >
                     Return to Basket
                   </button>
@@ -264,12 +374,17 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
               </div>
             )}
 
-            {/* Security Note */}
-            <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-center gap-1.5 text-stone-400 text-[10px]">
+            {/* Security Notice */}
+            <div
+              style={{
+                marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(0,0,0,0.07)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: 11, color: '#a8a29e',
+              }}
+            >
               <ShieldCheck size={12} />
-              <span>Simulated sandbox transaction. No real funds processed.</span>
+              <span>Simulated sandbox · No real funds processed</span>
             </div>
-
           </div>
         </div>
       )}
