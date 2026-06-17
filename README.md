@@ -83,7 +83,7 @@ Servly/
    PORT=5000
    DB_HOST=localhost
    DB_USER=root
-   DB_PASSWORD=noobmaster69
+   DB_PASSWORD=''
    DB_NAME=servly
    ```
 3. Run the development server:
