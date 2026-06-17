@@ -1,96 +1,241 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import WelcomePage from './pages/WelcomePage';
 import MenuPage from './pages/MenuPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import AdminDashboard from './pages/AdminDashboard';
 
-// Set up dynamically configurable API Base URL. 
-// For local network mobile testing, connect both desktop and mobile to the same Wi-Fi
-// and change this to http://<your-desktop-ip>:5000.
 const API_BASE_URL = 'http://localhost:5000';
 
+// Get or create a unique session ID per browser tab
+function getSessionId() {
+  let id = sessionStorage.getItem('servly_session_id');
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem('servly_session_id', id);
+  }
+  return id;
+}
+
 export default function App() {
-  const [page, setPage] = useState('menu'); // 'menu', 'cart', 'checkout', 'admin'
+  const [page, setPage] = useState(null);
   const [cart, setCart] = useState([]);
   const [tableNumber, setTableNumber] = useState('');
+  const sessionId = getSessionId();
+  const lastRegistered = useRef(0);
 
-  // Extract table number and routing query arguments from URL parameters on load
+  // Parse URL on first load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    
-    // Parse table number e.g., ?table=3
+    const pathname = window.location.pathname;
+
+    if (pathname === '/admin') { setPage('admin'); return; }
+
+    const isAdmin = params.get('admin') === 'true' || params.get('page') === 'admin';
+    if (isAdmin) { setPage('admin'); return; }
+
     const tableParam = params.get('table');
     if (tableParam) {
       setTableNumber(tableParam);
-    }
-
-    // Direct routing option e.g., ?admin=true or ?page=admin
-    const isAdmin = params.get('admin') === 'true' || params.get('page') === 'admin';
-    if (isAdmin) {
-      setPage('admin');
-    } else {
+      // Register session immediately for QR-scanned tables
+      fetch(`${API_BASE_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, table_number: parseInt(tableParam, 10) }),
+      }).catch(() => {});
+      
       const pageParam = params.get('page');
       if (pageParam && ['menu', 'cart', 'checkout'].includes(pageParam)) {
         setPage(pageParam);
+      } else {
+        setPage('menu');
       }
-    }
-  }, []);
-
-  // Update document title dynamically based on active page
-  useEffect(() => {
-    let title = 'Servly — Premium Ordering';
-    if (page === 'admin') {
-      title = 'Servly — Admin Portal';
-    } else if (page === 'cart') {
-      title = 'Your Basket — Servly';
-    } else if (page === 'checkout') {
-      title = 'Checkout — Servly';
-    }
-    document.title = title;
-  }, [page]);
-
-  // Cart Management Functions
-  const addToCart = (product) => {
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.id === product.id);
-      if (existingItem) {
-        return prevCart.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prevCart, { ...product, quantity: 1 }];
-    });
-  };
-
-  const updateQuantity = (productId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeFromCart(productId);
       return;
     }
-    setCart((prevCart) =>
-      prevCart.map((item) =>
-        item.id === productId ? { ...item, quantity: newQuantity } : item
-      )
-    );
-  };
 
-  const removeFromCart = (productId) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
-  };
+    const pageParam = params.get('page');
+    if (pageParam && ['menu', 'cart', 'checkout'].includes(pageParam)) {
+      setPage(pageParam);
+      return;
+    }
 
-  const clearCart = () => {
-    setCart([]);
-  };
+    setPage('welcome');
+  }, []);
 
-  // State-driven routing engine
+  // Sync state changes to URL
+  useEffect(() => {
+    if (page === null) return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    // Update or clear 'table' parameter
+    if (tableNumber) {
+      params.set('table', tableNumber);
+    } else {
+      params.delete('table');
+    }
+
+    // Update or clear 'page' parameter
+    if (page === 'admin') {
+      params.set('page', 'admin');
+    } else if (page && page !== 'welcome' && page !== 'menu') {
+      params.set('page', page);
+    } else {
+      params.delete('page');
+    }
+
+    // Don't add page/admin param if pathname is /admin
+    if (window.location.pathname === '/admin') {
+      params.delete('page');
+      params.delete('admin');
+    }
+
+    const searchString = params.toString();
+    const newSearch = searchString ? `?${searchString}` : '';
+    const newUrl = `${window.location.pathname}${newSearch}`;
+
+    // Push state only if search changed to avoid redundant entries/loops
+    if (window.location.search !== newSearch) {
+      window.history.pushState({ page, tableNumber }, '', newUrl);
+    }
+  }, [page, tableNumber]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const pathname = window.location.pathname;
+
+      if (pathname === '/admin' || params.get('page') === 'admin' || params.get('admin') === 'true') {
+        setPage('admin');
+        return;
+      }
+
+      const tableParam = params.get('table');
+      if (tableParam) {
+        setTableNumber(tableParam);
+      } else {
+        setTableNumber('');
+      }
+
+      const pageParam = params.get('page');
+      if (pageParam && ['menu', 'cart', 'checkout'].includes(pageParam)) {
+        setPage(pageParam);
+      } else if (tableParam) {
+        setPage('menu');
+      } else {
+        setPage('welcome');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Heartbeat every 60s to keep session alive
+  useEffect(() => {
+    if (!tableNumber) return;
+    const interval = setInterval(() => {
+      fetch(`${API_BASE_URL}/api/sessions/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      }).catch(() => {});
+    }, 60_000);
+  }, [tableNumber, sessionId]);
+
+  // If tableNumber becomes empty, delete the session from DB immediately
+  useEffect(() => {
+    if (page === null || page === 'admin') return;
+    if (!tableNumber) {
+      fetch(`${API_BASE_URL}/api/sessions/leave?session_id=${sessionId}`, {
+        method: 'POST',
+      }).catch(() => {});
+    }
+  }, [tableNumber, sessionId, page]);
+
+  // On tab close / navigate away → delete session via sendBeacon
+  useEffect(() => {
+    const handleUnload = () => {
+      navigator.sendBeacon(`${API_BASE_URL}/api/sessions/leave?session_id=${sessionId}`);
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [sessionId]);
+
+  // Track tableNumber registration times to support grace period
+  useEffect(() => {
+    if (tableNumber) {
+      lastRegistered.current = Date.now();
+    }
+  }, [tableNumber]);
+
+  // Poll active sessions to see if admin released this session
+  useEffect(() => {
+    if (!tableNumber || page === 'admin') return;
+
+    const interval = setInterval(async () => {
+      // Grace period of 5 seconds to avoid race conditions during initial registration
+      if (Date.now() - lastRegistered.current < 5000) return;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sessions`);
+        if (!res.ok) return;
+        const activeSessions = await res.json();
+        const stillActive = activeSessions.some(s => s.session_id === sessionId);
+        if (!stillActive) {
+          // Session was released/deleted!
+          setTableNumber('');
+          setPage('welcome');
+        }
+      } catch (err) {
+        console.warn('Failed to check session status:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [tableNumber, sessionId, page]);
+
+  // Dynamic document title
+  useEffect(() => {
+    const titles = {
+      admin: 'Servly — Admin Portal',
+      cart: 'Your Basket — Servly',
+      checkout: 'Checkout — Servly',
+      welcome: 'Servly — Welcome',
+    };
+    document.title = titles[page] || 'Servly';
+  }, [page]);
+
+  // Cart helpers
+  const addToCart = (product) => {
+    setCart(prev => {
+      const existing = prev.find(i => i.id === product.id);
+      if (existing) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { ...product, quantity: 1 }];
+    });
+  };
+  const updateQuantity = (productId, qty) => {
+    if (qty <= 0) { removeFromCart(productId); return; }
+    setCart(prev => prev.map(i => i.id === productId ? { ...i, quantity: qty } : i));
+  };
+  const removeFromCart = (productId) => setCart(prev => prev.filter(i => i.id !== productId));
+  const clearCart = () => setCart([]);
+
+  if (page === null) return null;
+
   switch (page) {
-    case 'admin':
+    case 'welcome':
       return (
-        <AdminDashboard 
-          apiBaseUrl={API_BASE_URL} 
-          setPage={setPage} 
+        <WelcomePage
+          apiBaseUrl={API_BASE_URL}
+          sessionId={sessionId}
+          setPage={setPage}
+          setTableNumber={setTableNumber}
         />
       );
+    case 'admin':
+      return <AdminDashboard apiBaseUrl={API_BASE_URL} setPage={setPage} />;
     case 'cart':
       return (
         <CartPage
