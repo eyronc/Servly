@@ -71,6 +71,7 @@ function StatusDot({ status, type = 'order' }) {
 
 export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const [orders, setOrders] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -79,6 +80,9 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const [qrTableNumber, setQrTableNumber] = useState('1');
   const [qrGeneratedUrl, setQrGeneratedUrl] = useState('');
   const [justRefreshed, setJustRefreshed] = useState(false);
+  const [tableCount, setTableCount] = useState('5');
+  const [tableCountSaving, setTableCountSaving] = useState(false);
+  const [tableCountSaved, setTableCountSaved] = useState(false);
 
   const pollInterval = useRef(null);
 
@@ -91,8 +95,12 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
     try {
-      const response = await axios.get(`${apiBaseUrl}/api/orders`);
-      setOrders(response.data);
+      const [ordersRes, sessionsRes] = await Promise.all([
+        axios.get(`${apiBaseUrl}/api/orders`),
+        axios.get(`${apiBaseUrl}/api/sessions`),
+      ]);
+      setOrders(ordersRes.data);
+      setSessions(sessionsRes.data);
       setError(null);
       if (isSilent) { setJustRefreshed(true); setTimeout(() => setJustRefreshed(false), 1500); }
     } catch (err) {
@@ -109,6 +117,26 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
     pollInterval.current = setInterval(() => fetchOrders(true), 8000);
     return () => { if (pollInterval.current) clearInterval(pollInterval.current); };
   }, [apiBaseUrl]);
+
+  // Fetch current table count setting
+  useEffect(() => {
+    axios.get(`${apiBaseUrl}/api/settings`)
+      .then(res => { if (res.data.table_count) setTableCount(res.data.table_count); })
+      .catch(() => {});
+  }, [apiBaseUrl]);
+
+  const saveTableCount = async () => {
+    setTableCountSaving(true);
+    try {
+      await axios.put(`${apiBaseUrl}/api/settings/table_count`, { value: tableCount });
+      setTableCountSaved(true);
+      setTimeout(() => setTableCountSaved(false), 2000);
+    } catch (err) {
+      console.error('Failed to save table count:', err);
+    } finally {
+      setTableCountSaving(false);
+    }
+  };
 
   const handleUpdateStatus = async (orderId, updates) => {
     try {
@@ -275,6 +303,140 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
           <StatCard label="Failed / Unpaid" value={failedOrders.length}          icon={AlertTriangle}  accent="#ef4444" delay={180} />
         </div>
 
+        {/* Table Status Panel */}
+        <div
+          className="glass-dark animate-fade-in-up"
+          style={{ borderRadius: 24, padding: 24, marginBottom: 24, animationDelay: '100ms' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <div>
+              <h2 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 17, color: '#f5f5f0' }}>
+                Table Status
+              </h2>
+              <p style={{ fontSize: 12, color: '#52525b', marginTop: 3 }}>
+                Live occupancy — updates every 8s
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: '#f59e0b', display: 'inline-block' }} />
+                <span style={{ fontSize: 11, color: '#71717a' }}>Occupied</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: '#3f3f46', display: 'inline-block' }} />
+                <span style={{ fontSize: 11, color: '#71717a' }}>Free</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 10 }}>
+            {Array.from({ length: parseInt(tableCount, 10) || 5 }, (_, i) => i + 1).map(num => {
+              const session = sessions.find(s => s.table_number === num);
+              const isOccupied = !!session;
+              const seatedMins = session
+                ? Math.floor((Date.now() - new Date(session.created_at).getTime()) / 60000)
+                : null;
+
+              return (
+                <div
+                  key={num}
+                  style={{
+                    borderRadius: 16,
+                    padding: '14px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 8,
+                    border: isOccupied
+                      ? '1.5px solid rgba(245,158,11,0.4)'
+                      : '1px solid rgba(255,255,255,0.06)',
+                    background: isOccupied
+                      ? 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.06))'
+                      : 'rgba(255,255,255,0.03)',
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  {/* Table icon */}
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="3" width="14" height="9" rx="3"
+                      fill={isOccupied ? '#f59e0b' : '#3f3f46'} />
+                    <rect x="3" y="12" width="18" height="3" rx="1.5"
+                      fill={isOccupied ? '#d97706' : '#27272a'} />
+                    <line x1="8" y1="15" x2="8" y2="21"
+                      stroke={isOccupied ? '#b45309' : '#27272a'} strokeWidth="2" strokeLinecap="round" />
+                    <line x1="16" y1="15" x2="16" y2="21"
+                      stroke={isOccupied ? '#b45309' : '#27272a'} strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+
+                  <span style={{
+                    fontFamily: "'Outfit', sans-serif",
+                    fontWeight: 800,
+                    fontSize: 14,
+                    color: isOccupied ? '#f5f5f0' : '#52525b',
+                  }}>
+                    {num}
+                  </span>
+
+                  <span style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: isOccupied ? '#f59e0b' : '#3f3f46',
+                  }}>
+                    {isOccupied ? 'Occupied' : 'Free'}
+                  </span>
+
+                  {isOccupied && seatedMins !== null && (
+                    <span style={{ fontSize: 9, color: '#71717a' }}>
+                      {seatedMins < 1 ? 'just now' : `${seatedMins}m ago`}
+                    </span>
+                  )}
+
+                  {isOccupied && (
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Are you sure you want to clear/free Table ${num}?`)) {
+                          try {
+                            await axios.post(`${apiBaseUrl}/api/sessions/leave`, { session_id: session.session_id });
+                            fetchOrders(true);
+                          } catch (err) {
+                            console.error('Failed to release session:', err);
+                            alert('Failed to release table.');
+                          }
+                        }
+                      }}
+                      className="press-effect"
+                      style={{
+                        marginTop: 4,
+                        fontSize: 8,
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: 4,
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                      }}
+                    >
+                      Release
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Sub-grid: Orders (2/3) + QR Generator (1/3) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
@@ -372,6 +534,15 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                           <span style={{ fontSize: 10, color: '#52525b' }}>
                             {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
+                          {order.table_number > 0 && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, color: '#d97706',
+                              background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)',
+                              borderRadius: 999, padding: '2px 8px',
+                            }}>
+                              Table {order.table_number}
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, color: '#71717a' }}>
                           <User size={11} />
@@ -458,15 +629,64 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
               </p>
             </div>
 
-            {/* Table Input */}
+            {/* ── Table Count Setting ── */}
+            <div
+              style={{
+                background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)',
+                borderRadius: 16, padding: 16,
+              }}
+            >
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                Total Tables Available
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  id="table-count-input"
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={tableCount}
+                  onChange={e => setTableCount(e.target.value)}
+                  className="input-glass-dark"
+                  style={{ flex: 1, padding: '8px 12px', fontSize: 14, fontWeight: 700 }}
+                />
+                <button
+                  id="save-table-count-btn"
+                  onClick={saveTableCount}
+                  disabled={tableCountSaving}
+                  style={{
+                    padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 700,
+                    border: 'none', cursor: tableCountSaving ? 'wait' : 'pointer',
+                    background: tableCountSaved
+                      ? 'linear-gradient(135deg, #10b981, #059669)'
+                      : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    color: '#1c1917',
+                    transition: 'all 0.25s ease',
+                    boxShadow: tableCountSaved
+                      ? '0 4px 12px rgba(16,185,129,0.3)'
+                      : '0 4px 12px rgba(245,158,11,0.3)',
+                    flexShrink: 0,
+                    minWidth: 60,
+                  }}
+                >
+                  {tableCountSaved ? '✓ Saved' : tableCountSaving ? '...' : 'Save'}
+                </button>
+              </div>
+              <p style={{ fontSize: 10, color: '#52525b', marginTop: 8, lineHeight: 1.5 }}>
+                Customers will see Tables 1–{tableCount} on the welcome screen.
+              </p>
+            </div>
+
+            {/* Table Input for QR */}
             <div>
               <label htmlFor="qr-table" style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Table Number
+                Generate QR for Table
               </label>
               <input
                 id="qr-table"
                 type="number"
                 min="1"
+                max={tableCount}
                 placeholder="e.g. 5"
                 value={qrTableNumber}
                 onChange={e => setQrTableNumber(e.target.value)}

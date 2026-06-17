@@ -10,6 +10,8 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
   const [simulatedState, setSimulatedState] = useState(null);
   const [orderResponse, setOrderResponse] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  // Track the order ID from the first POST so retries PATCH instead of creating duplicates
+  const [pendingOrderId, setPendingOrderId] = useState(null);
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -25,17 +27,31 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
 
   const handleSimulatePaymentOutcome = async (outcome) => {
     setSimulatedState('submitting');
-    const orderItems = cart.map(item => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity }));
+    const newPaymentStatus = outcome === 'success' ? 'paid' : 'failed';
+
     try {
-      const orderData = {
-        customer_name: `${customerName} (Table ${tableInput})`,
-        items: orderItems,
-        total_amount: cartTotal,
-        payment_status: outcome === 'success' ? 'paid' : 'failed',
-        order_status: 'pending',
-      };
-      const response = await axios.post(`${apiBaseUrl}/api/orders`, orderData);
-      setOrderResponse(response.data);
+      if (pendingOrderId === null) {
+        // First attempt — create the order
+        const orderItems = cart.map(item => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity }));
+        const orderData = {
+          customer_name: customerName,
+          table_number: parseInt(tableInput, 10),
+          items: orderItems,
+          total_amount: cartTotal,
+          payment_status: newPaymentStatus,
+          order_status: 'pending',
+        };
+        const response = await axios.post(`${apiBaseUrl}/api/orders`, orderData);
+        setOrderResponse(response.data);
+        setPendingOrderId(response.data.orderId);
+      } else {
+        // Retry — PATCH the existing failed order instead of creating a new one
+        await axios.patch(`${apiBaseUrl}/api/orders/${pendingOrderId}`, {
+          payment_status: newPaymentStatus,
+        });
+        setOrderResponse(prev => ({ ...prev, orderId: pendingOrderId }));
+      }
+
       if (outcome === 'success') { setSimulatedState('success'); clearCart(); }
       else { setSimulatedState('failure'); }
     } catch (err) {
@@ -202,21 +218,33 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
           style={{ background: 'rgba(5,5,7,0.7)', backdropFilter: 'blur(16px)' }}
         >
           <div
-            className="glass animate-scale-in w-full relative overflow-hidden"
-            style={{ maxWidth: 420, borderRadius: 28, padding: 32 }}
+            className="animate-scale-in w-full relative overflow-hidden"
+            style={{
+              maxWidth: 420, borderRadius: 28, padding: 32,
+              background: '#fffdf7',
+              border: '1px solid rgba(245,158,11,0.15)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.28)',
+            }}
           >
             {/* Brand badge */}
             <div style={{ textAlign: 'center', marginBottom: 28 }}>
               <span
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
-                  borderRadius: 999, padding: '5px 14px',
-                  fontSize: 11, fontWeight: 700, color: '#b45309', letterSpacing: '0.06em',
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(180,83,9,0.12))',
+                  border: '1px solid rgba(245,158,11,0.4)',
+                  borderRadius: 999, padding: '6px 16px',
+                  fontSize: 11, fontWeight: 700, color: '#92400e', letterSpacing: '0.07em',
                   textTransform: 'uppercase',
                 }}
               >
-                🔒 Servly Payment Sandbox
+                {/* Lock icon */}
+                <svg width="11" height="13" viewBox="0 0 11 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="5.5" width="9" height="7" rx="2" fill="#b45309" opacity="0.9"/>
+                  <path d="M3 5.5V3.5a2.5 2.5 0 0 1 5 0v2" stroke="#b45309" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+                  <circle cx="5.5" cy="9" r="1" fill="white"/>
+                </svg>
+                Servly Payment Sandbox
               </span>
             </div>
 
@@ -246,28 +274,62 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                     id="simulate-success-btn"
                     onClick={() => handleSimulatePaymentOutcome('success')}
                     className="press-effect"
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                      e.currentTarget.style.boxShadow = '0 6px 24px rgba(5,150,105,0.55)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #059669, #047857)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(5,150,105,0.35)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
                     style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                       background: 'linear-gradient(135deg, #059669, #047857)',
                       color: '#fff', fontWeight: 700, fontSize: 14,
                       padding: '14px 28px', borderRadius: 16, border: 'none',
                       boxShadow: '0 4px 16px rgba(5,150,105,0.35)',
-                      transition: 'all 0.2s ease',
+                      transition: 'all 0.22s ease', cursor: 'pointer',
                     }}
                   >
-                    ✓ Simulate Success (Paid)
+                    {/* Checkmark icon */}
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="8" cy="8" r="7" stroke="rgba(255,255,255,0.4)" strokeWidth="1.2"/>
+                      <path d="M4.5 8.5l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Simulate Success (Paid)
                   </button>
                   <button
                     id="simulate-failure-btn"
                     onClick={() => handleSimulatePaymentOutcome('failure')}
                     className="press-effect"
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.16)';
+                      e.currentTarget.style.borderColor = 'rgba(239,68,68,0.7)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(239,68,68,0.2)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.07)';
+                      e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
                     style={{
-                      background: 'rgba(239,68,68,0.08)', color: '#dc2626', fontWeight: 700, fontSize: 14,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      background: 'rgba(239,68,68,0.07)', color: '#dc2626', fontWeight: 700, fontSize: 14,
                       padding: '14px 28px', borderRadius: 16,
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      transition: 'all 0.2s ease',
+                      border: '1.5px solid rgba(239,68,68,0.35)',
+                      transition: 'all 0.22s ease', cursor: 'pointer',
                     }}
                   >
-                    ✕ Simulate Failure (Declined)
+                    {/* X icon */}
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="8" cy="8" r="7" stroke="rgba(220,38,38,0.4)" strokeWidth="1.2"/>
+                      <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round"/>
+                    </svg>
+                    Simulate Failure (Declined)
                   </button>
                 </div>
               </div>
@@ -296,8 +358,12 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                 >
                   <CheckCircle2 size={38} style={{ color: '#10b981' }} />
                 </div>
-                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 22, color: '#0c0c0f' }}>
-                  Order Placed! 🎉
+                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 22, color: '#0c0c0f', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  Order Placed!
+                  {/* Party star SVG */}
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11 2l2.09 6.26L19 8.27l-4.91 4.37 1.64 6.36L11 15.27l-4.73 3.73 1.64-6.36L3 8.27l5.91-.01z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.8"/>
+                  </svg>
                 </h3>
                 <p style={{ fontSize: 13, color: '#78716c', marginTop: 8 }}>
                   Payment succeeded. Order{' '}
@@ -349,7 +415,7 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                   Transaction Declined
                 </h3>
                 <p style={{ fontSize: 13, color: '#78716c', marginTop: 8, marginBottom: 24 }}>
-                  Your mock payment failed. The order was logged as{' '}
+                  Your payment failed. The order was logged as{' '}
                   <span style={{ fontWeight: 700, color: '#ef4444' }}>Failed</span>.
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -362,10 +428,18 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                   <button
                     onClick={() => { setIsSimulating(false); setSimulatedState(null); setPage('cart'); }}
                     className="press-effect"
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(0,0,0,0.08)';
+                      e.currentTarget.style.color = '#292524';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+                      e.currentTarget.style.color = '#57534e';
+                    }}
                     style={{
                       padding: '12px 28px', borderRadius: 14, fontWeight: 600, fontSize: 13,
                       background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)',
-                      color: '#57534e',
+                      color: '#57534e', transition: 'all 0.18s ease', cursor: 'pointer',
                     }}
                   >
                     Return to Basket
@@ -382,8 +456,6 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                 fontSize: 11, color: '#a8a29e',
               }}
             >
-              <ShieldCheck size={12} />
-              <span>Simulated sandbox · No real funds processed</span>
             </div>
           </div>
         </div>

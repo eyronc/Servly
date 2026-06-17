@@ -26,7 +26,7 @@ export const getOrders = async (req, res) => {
 
 // Create a new order
 export const createOrder = async (req, res) => {
-  const { customer_name, items, total_amount, payment_status, order_status } = req.body;
+  const { customer_name, table_number, items, total_amount, payment_status, order_status } = req.body;
 
   if (!customer_name || !items || !Array.isArray(items) || items.length === 0 || total_amount === undefined) {
     return res.status(400).json({ error: 'Invalid order details. Make sure customer_name, items (array), and total_amount are provided.' });
@@ -36,10 +36,11 @@ export const createOrder = async (req, res) => {
     const itemsJson = JSON.stringify(items);
     const payStatus = payment_status || 'pending';
     const ordStatus = order_status || 'pending';
+    const tableNum = parseInt(table_number, 10) || 0;
 
     const [result] = await db.query(
-      'INSERT INTO orders (customer_name, items, total_amount, payment_status, order_status) VALUES (?, ?, ?, ?, ?)',
-      [customer_name, itemsJson, total_amount, payStatus, ordStatus]
+      'INSERT INTO orders (customer_name, table_number, items, total_amount, payment_status, order_status) VALUES (?, ?, ?, ?, ?, ?)',
+      [customer_name, tableNum, itemsJson, total_amount, payStatus, ordStatus]
     );
 
     res.status(201).json({
@@ -48,6 +49,7 @@ export const createOrder = async (req, res) => {
       order: {
         id: result.insertId,
         customer_name,
+        table_number: tableNum,
         items,
         total_amount,
         payment_status: payStatus,

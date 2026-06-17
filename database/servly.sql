@@ -19,11 +19,28 @@ DROP TABLE IF EXISTS orders;
 CREATE TABLE orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     customer_name VARCHAR(255) NOT NULL,
+    table_number INT NOT NULL DEFAULT 0,
     items JSON NOT NULL,
     total_amount DECIMAL(10, 2) NOT NULL,
     payment_status ENUM('pending', 'paid', 'failed') DEFAULT 'pending',
     order_status ENUM('pending', 'preparing', 'completed') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Settings Table
+DROP TABLE IF EXISTS settings;
+CREATE TABLE settings (
+    `key` VARCHAR(100) NOT NULL PRIMARY KEY,
+    value VARCHAR(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table Sessions Table
+DROP TABLE IF EXISTS table_sessions;
+CREATE TABLE table_sessions (
+    session_id VARCHAR(255) PRIMARY KEY,
+    table_number INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Seed Products
@@ -36,3 +53,6 @@ INSERT INTO products (name, description, price, image_url, category) VALUES
 ('Warm Chocolate Lava Cake', 'Decadent chocolate cake with a molten liquid center. Served warm with a scoop of organic Madagascar vanilla bean gelato and fresh raspberries.', 9.50, 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=600&q=80', 'Desserts'),
 ('Ceremonial Matcha Latte', 'Whisked premium Uji matcha sweetened with organic agave nectar and poured over chilled oat milk.', 6.50, 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=600&q=80', 'Drinks'),
 ('Artisanal Hibiscus Lemonade', 'Cold-pressed lemon juice, organic cane sugar, and brewed hibiscus flower tea, garnished with fresh mint and lemon slices.', 5.50, 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80', 'Drinks');
+
+-- Seed Default Settings
+INSERT INTO settings (`key`, value) VALUES ('table_count', '5');
