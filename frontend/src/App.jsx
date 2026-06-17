@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import WelcomePage from './pages/WelcomePage';
 import MenuPage from './pages/MenuPage';
 import CartPage from './pages/CartPage';
@@ -22,6 +22,7 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [tableNumber, setTableNumber] = useState('');
   const sessionId = getSessionId();
+  const lastRegistered = useRef(0);
 
   // Parse URL on first load
   useEffect(() => {
@@ -161,6 +162,39 @@ export default function App() {
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [sessionId]);
+
+  // Track tableNumber registration times to support grace period
+  useEffect(() => {
+    if (tableNumber) {
+      lastRegistered.current = Date.now();
+    }
+  }, [tableNumber]);
+
+  // Poll active sessions to see if admin released this session
+  useEffect(() => {
+    if (!tableNumber || page === 'admin') return;
+
+    const interval = setInterval(async () => {
+      // Grace period of 5 seconds to avoid race conditions during initial registration
+      if (Date.now() - lastRegistered.current < 5000) return;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/sessions`);
+        if (!res.ok) return;
+        const activeSessions = await res.json();
+        const stillActive = activeSessions.some(s => s.session_id === sessionId);
+        if (!stillActive) {
+          // Session was released/deleted!
+          setTableNumber('');
+          setPage('welcome');
+        }
+      } catch (err) {
+        console.warn('Failed to check session status:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [tableNumber, sessionId, page]);
 
   // Dynamic document title
   useEffect(() => {
