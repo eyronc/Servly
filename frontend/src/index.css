@@ -345,3 +345,48 @@ button, select, a, [role="button"] { cursor: pointer; }
 .card-shimmer:hover::after {
   left: 160%;
 }
+
+/* ===================== CONFIRM MODAL ANIMATION ===================== */
+
+@keyframes confirmModalIn {
+  from { opacity: 0; transform: scale(0.88) translateY(16px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ===================== ADMIN RESPONSIVE ===================== */
+
+/* Tablet: stack sub-grid, keep 2-col KPI and order grid */
+@media (max-width: 900px) {
+  .admin-subgrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Mobile: single column everything, hamburger nav */
+@media (max-width: 640px) {
+  .admin-nav-desktop {
+    display: none !important;
+  }
+  .admin-nav-mobile {
+    display: flex !important;
+  }
+  .admin-main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .admin-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .admin-table-grid {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)) !important;
+  }
+  .admin-subgrid {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-order-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .admin-status-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
