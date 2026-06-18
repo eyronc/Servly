@@ -1,12 +1,116 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   RefreshCw, PhilippinePeso, Clock, CheckCircle, AlertTriangle,
   Search, ExternalLink, Download, Printer, User, UtensilsCrossed, TrendingUp,
-  Plus, Trash2, Edit3, X,
+  Plus, Trash2, Edit3, X, LogOut, Menu,
 } from 'lucide-react';
 import Logo from '../components/Logo';
+
+// ── Confirm Modal ───────────────────────────────────────────────────────────
+function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', danger = true, onConfirm, onCancel }) {
+  const [closing, setClosing] = useState(false);
+
+  const handleCancel = () => {
+    setClosing(true);
+    setTimeout(() => { setClosing(false); onCancel(); }, 260);
+  };
+
+  const handleConfirm = () => {
+    setClosing(true);
+    setTimeout(() => { setClosing(false); onConfirm(); }, 260);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+        background: closing ? 'rgba(5,5,7,0)' : 'rgba(5,5,7,0.72)',
+        backdropFilter: closing ? 'blur(0px)' : 'blur(12px)',
+        transition: 'background 0.26s ease, backdrop-filter 0.26s ease',
+      }}
+      onClick={handleCancel}
+    >
+      <div
+        style={{
+          width: '100%', maxWidth: 380, borderRadius: 24,
+          background: 'linear-gradient(145deg, #1a1a24, #12121a)',
+          border: '1px solid rgba(255,255,255,0.09)',
+          boxShadow: '0 32px 64px rgba(0,0,0,0.6)',
+          padding: '28px 24px',
+          display: 'flex', flexDirection: 'column', gap: 20,
+          transform: closing ? 'scale(0.92) translateY(12px)' : 'scale(1) translateY(0)',
+          opacity: closing ? 0 : 1,
+          animation: closing ? 'none' : 'confirmModalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Icon */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center' }}>
+          <div style={{
+            width: 60, height: 60, borderRadius: 999,
+            background: danger ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)',
+            border: `1.5px solid ${danger ? 'rgba(239,68,68,0.35)' : 'rgba(245,158,11,0.35)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={26} style={{ color: danger ? '#f87171' : '#f59e0b' }} />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 17, color: '#f5f5f0', marginBottom: 8 }}>
+              {title}
+            </h3>
+            <p style={{ fontSize: 13, color: '#71717a', lineHeight: 1.6 }}>
+              {message}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={handleCancel}
+            style={{
+              flex: 1, padding: '11px', borderRadius: 12,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#a1a1aa', fontWeight: 600, fontSize: 13,
+              cursor: 'pointer', transition: 'all 0.18s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.09)'; e.currentTarget.style.color='#f5f5f0'; }}
+            onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='#a1a1aa'; }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            style={{
+              flex: 1, padding: '11px', borderRadius: 12,
+              background: danger
+                ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                : 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: 'none',
+              color: danger ? '#fff' : '#1c1917',
+              fontWeight: 700, fontSize: 13,
+              cursor: 'pointer', transition: 'all 0.18s ease',
+              boxShadow: danger
+                ? '0 4px 14px rgba(239,68,68,0.35)'
+                : '0 4px 14px rgba(245,158,11,0.35)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.filter='brightness(1.1)'; e.currentTarget.style.transform='translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.filter='brightness(1)'; e.currentTarget.style.transform='translateY(0)'; }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Stat Card ──────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon: Icon, accent, delay = 0 }) {
@@ -84,6 +188,7 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const [tableCount, setTableCount] = useState('5');
   const [tableCountSaving, setTableCountSaving] = useState(false);
   const [tableCountSaved, setTableCountSaved] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Products CRUD states
   const [products, setProducts] = useState([]);
@@ -91,6 +196,15 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const [viewMode, setViewMode] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', confirmLabel: '', danger: true, onConfirm: null });
+  const openConfirm = useCallback((title, message, confirmLabel, danger, onConfirm) => {
+    setConfirmModal({ open: true, title, message, confirmLabel, danger, onConfirm });
+  }, []);
+  const closeConfirm = useCallback(() => {
+    setConfirmModal(prev => ({ ...prev, open: false }));
+  }, []);
 
   // Form states
   const [formName, setFormName] = useState('');
@@ -173,16 +287,21 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
     }
   };
 
-  const handleDeleteProduct = async (productId, name) => {
-    if (confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
-      try {
-        await axios.delete(`${apiBaseUrl}/api/products/${productId}`);
-        fetchProducts();
-      } catch (err) {
-        console.error('Error deleting product:', err);
-        alert('Failed to delete product.');
+  const handleDeleteProduct = (productId, name) => {
+    openConfirm(
+      'Delete Menu Item',
+      `"${name}" will be permanently removed from the menu. This cannot be undone.`,
+      'Delete',
+      true,
+      async () => {
+        try {
+          await axios.delete(`${apiBaseUrl}/api/products/${productId}`);
+          fetchProducts();
+        } catch (err) {
+          console.error('Error deleting product:', err);
+        }
       }
-    }
+    );
   };
 
   useEffect(() => {
@@ -295,44 +414,48 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
   const TAB_LABELS = { all: 'All', pending: 'Pending', preparing: 'Preparing', completed: 'Completed', failed: 'Failed' };
 
   return (
-    <div className="min-h-screen bg-admin-hero text-stone-200 pb-16">
-      
+    <div className="min-h-screen bg-admin-hero text-stone-200 pb-16" style={{ overflowX: 'hidden', width: '100%' }}>
+
+      {/* ─── Confirm Modal ─── */}
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        danger={confirmModal.danger}
+        onConfirm={() => { closeConfirm(); confirmModal.onConfirm?.(); }}
+        onCancel={closeConfirm}
+      />
+
       {/* ─── Top Navigation ─── */}
       <nav className="sticky top-0 z-40" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
         <div className="glass-dark" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16 items-center">
+          <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', height: 60, alignItems: 'center' }}>
               {/* Brand */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Logo size={36} theme="dark" showText={false} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Logo size={34} theme="dark" showText={false} />
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 17, color: '#f5f5f0', letterSpacing: '-0.02em' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: 16, color: '#f5f5f0', letterSpacing: '-0.02em' }}>
                       Servly
                     </span>
-                    <span
-                      style={{
-                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                        color: '#1c1917', fontSize: 9, fontWeight: 800,
-                        padding: '2px 8px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.08em',
-                      }}
-                    >
+                    <span style={{
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                      color: '#1c1917', fontSize: 9, fontWeight: 800,
+                      padding: '2px 7px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.08em',
+                    }}>
                       Admin
                     </span>
                   </div>
-                  <p style={{ fontSize: 10, color: '#52525b', fontWeight: 500 }}>
-                    Dashboard Portal
-                  </p>
+                  <p style={{ fontSize: 10, color: '#52525b', fontWeight: 500 }}>Dashboard Portal</p>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Auto-refresh indicator */}
+              {/* Desktop Actions */}
+              <div className="admin-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {justRefreshed && (
-                  <span className="animate-fade-in" style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>
-                    ✓ Updated
-                  </span>
+                  <span className="animate-fade-in" style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>✓ Updated</span>
                 )}
                 <button
                   id="refresh-orders-btn"
@@ -356,26 +479,13 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                   onClick={() => setViewMode(prev => prev === 'dashboard' ? 'products' : 'dashboard')}
                   className="press-effect"
                   style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#e4e4e7',
-                    fontWeight: 700,
-                    fontSize: 12,
-                    padding: '8px 18px',
-                    borderRadius: 999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    transition: 'all 0.2s ease',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#e4e4e7', fontWeight: 700, fontSize: 12,
+                    padding: '8px 16px', borderRadius: 999,
+                    display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s ease',
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                    e.currentTarget.style.color = '#ffffff';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                    e.currentTarget.style.color = '#e4e4e7';
-                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.1)'; e.currentTarget.style.color='#ffffff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='#e4e4e7'; }}
                 >
                   <UtensilsCrossed size={13} />
                   <span>{viewMode === 'dashboard' ? 'Manage Menu' : 'Dashboard'}</span>
@@ -387,23 +497,83 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                   style={{
                     background: 'linear-gradient(135deg, #f59e0b, #d97706)',
                     color: '#1c1917', fontWeight: 700, fontSize: 12,
-                    padding: '8px 18px', borderRadius: 999, border: 'none',
+                    padding: '8px 16px', borderRadius: 999, border: 'none',
                     display: 'flex', alignItems: 'center', gap: 6,
-                    boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
-                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 14px rgba(245,158,11,0.3)', transition: 'all 0.2s ease',
                   }}
                 >
                   <span>Go to Menu</span>
                   <ExternalLink size={12} />
                 </button>
               </div>
+
+              {/* Mobile Hamburger */}
+              <button
+                className="admin-nav-mobile press-effect"
+                onClick={() => setMobileMenuOpen(prev => !prev)}
+                style={{
+                  display: 'none', padding: 9, borderRadius: 12,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#e4e4e7',
+                }}
+              >
+                {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
             </div>
+
+            {/* Mobile Dropdown Menu */}
+            {mobileMenuOpen && (
+              <div
+                className="animate-fade-in-up admin-nav-mobile"
+                style={{
+                  display: 'none', flexDirection: 'column', gap: 8,
+                  paddingBottom: 14, paddingTop: 4,
+                }}
+              >
+                <button
+                  onClick={() => { fetchOrders(); setMobileMenuOpen(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '11px 14px', borderRadius: 12,
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+                    color: '#a1a1aa', fontWeight: 600, fontSize: 13, width: '100%',
+                  }}
+                >
+                  <RefreshCw size={15} className={refreshing ? 'animate-spin-slow' : ''} />
+                  Refresh Data
+                </button>
+                <button
+                  onClick={() => { setViewMode(prev => prev === 'dashboard' ? 'products' : 'dashboard'); setMobileMenuOpen(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '11px 14px', borderRadius: 12,
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
+                    color: '#e4e4e7', fontWeight: 600, fontSize: 13, width: '100%',
+                  }}
+                >
+                  <UtensilsCrossed size={15} />
+                  {viewMode === 'dashboard' ? 'Manage Menu' : 'Dashboard'}
+                </button>
+                <button
+                  onClick={() => setPage('menu')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '11px 14px', borderRadius: 12,
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    border: 'none', color: '#1c1917', fontWeight: 700, fontSize: 13, width: '100%',
+                  }}
+                >
+                  <ExternalLink size={15} />
+                  Go to Customer Menu
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
 
       {/* ─── Main Body ─── */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+      <main className="admin-main" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 20px', marginTop: 28 }}>
 
         {/* Error Banner */}
         {error && (
@@ -426,12 +596,12 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
         {viewMode === 'dashboard' ? (
           <>
             {/* KPI Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard label="Total Revenue"  value={`₱${totalRevenue.toFixed(0)}`} icon={PhilippinePeso} accent="#10b981" delay={0} />
-          <StatCard label="Active Orders"  value={activeOrders.length}           icon={Clock}          accent="#f59e0b" delay={60} />
-          <StatCard label="Completed"      value={completedOrders.length}        icon={CheckCircle}    accent="#3b82f6" delay={120} />
-          <StatCard label="Failed / Unpaid" value={failedOrders.length}          icon={AlertTriangle}  accent="#ef4444" delay={180} />
-        </div>
+            <div className="admin-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
+              <StatCard label="Total Revenue"  value={`₱${totalRevenue.toFixed(0)}`} icon={PhilippinePeso} accent="#10b981" delay={0} />
+              <StatCard label="Active Orders"  value={activeOrders.length}           icon={Clock}          accent="#f59e0b" delay={60} />
+              <StatCard label="Completed"      value={completedOrders.length}        icon={CheckCircle}    accent="#3b82f6" delay={120} />
+              <StatCard label="Failed / Unpaid" value={failedOrders.length}          icon={AlertTriangle}  accent="#ef4444" delay={180} />
+            </div>
 
         {/* Table Status Panel */}
         <div
@@ -459,7 +629,7 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 10 }}>
+          <div className="admin-table-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 10 }}>
             {Array.from({ length: parseInt(tableCount, 10) || 5 }, (_, i) => i + 1).map(num => {
               const session = sessions.find(s => s.table_number === num);
               const isOccupied = !!session;
@@ -525,39 +695,37 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
 
                   {isOccupied && (
                     <button
-                      onClick={async () => {
-                        if (confirm(`Are you sure you want to clear/free Table ${num}?`)) {
-                          try {
-                            await axios.post(`${apiBaseUrl}/api/sessions/leave`, { session_id: session.session_id });
-                            fetchOrders(true);
-                          } catch (err) {
-                            console.error('Failed to release session:', err);
-                            alert('Failed to release table.');
+                      onClick={() => {
+                        openConfirm(
+                          `Clear Table ${num}`,
+                          `This will end the current session and free Table ${num} for new guests.`,
+                          'Free Table',
+                          true,
+                          async () => {
+                            try {
+                              await axios.post(`${apiBaseUrl}/api/sessions/leave`, { session_id: session.session_id });
+                              fetchOrders(true);
+                            } catch (err) {
+                              console.error('Failed to release session:', err);
+                            }
                           }
-                        }
+                        );
                       }}
                       className="press-effect"
                       style={{
-                        marginTop: 4,
-                        fontSize: 8,
-                        fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: 4,
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.02em',
+                        marginTop: 4, fontSize: 8, fontWeight: 700,
+                        padding: '4px 9px', borderRadius: 6,
+                        background: 'rgba(239,68,68,0.14)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        color: '#f87171', cursor: 'pointer',
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
                         transition: 'all 0.2s ease',
+                        display: 'flex', alignItems: 'center', gap: 4,
                       }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
-                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background='rgba(239,68,68,0.28)'; e.currentTarget.style.color='#fca5a5'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background='rgba(239,68,68,0.14)'; e.currentTarget.style.color='#f87171'; }}
                     >
+                      <LogOut size={8} />
                       Release
                     </button>
                   )}
@@ -568,15 +736,15 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
         </div>
 
         {/* Sub-grid: Orders (2/3) + QR Generator (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="admin-subgrid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, minWidth: 0 }}>
           
           {/* ── Orders Panel ── */}
-          <div className="lg:col-span-2" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
 
             {/* Search & Tabs */}
             <div
               className="glass-dark animate-fade-in-up"
-              style={{ borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+              style={{ borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}
             >
               {/* Tab Filters */}
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
@@ -643,7 +811,7 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger">
+              <div className="admin-order-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 {filteredOrders.map((order, index) => (
                   <div
                     key={order.id}
@@ -706,7 +874,7 @@ export default function AdminDashboard({ apiBaseUrl, setPage }) {
                     </div>
 
                     {/* Status Selects */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div className="admin-status-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       {[
                         { label: 'Order Status', key: 'order_status', val: order.order_status, opts: ['pending','preparing','completed'] },
                         { label: 'Payment',      key: 'payment_status', val: order.payment_status, opts: ['pending','paid','failed'] },
