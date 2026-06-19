@@ -3,21 +3,23 @@ import db from '../db.js';
 // Get all orders
 export const getOrders = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
-    // mysql2 automatically parses JSON columns on retrieval in most environments,
-    // but we ensure it is parsed just in case.
-    const orders = rows.map(row => {
-      let parsedItems = row.items;
-      if (typeof row.items === 'string') {
-        try {
-          parsedItems = JSON.parse(row.items);
-        } catch (e) {
-          parsedItems = [];
-        }
-      }
-      return { ...row, items: parsedItems };
+    const [orders] = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
+    const [items] = await db.query('SELECT * FROM order_items');
+    
+    // map items to orders
+    const ordersWithItems = orders.map(order => {
+      const orderItems = items
+        .filter(item => item.order_id === order.id)
+        .map(item => ({
+           id: item.product_id,
+           name: item.product_name,
+           price: item.price,
+           quantity: item.quantity
+        }));
+      return { ...order, items: orderItems };
     });
-    res.json(orders);
+    
+    res.json(ordersWithItems);
   } catch (error) {
     console.error('Error fetching orders:', error);
     res.status(500).json({ error: 'Failed to retrieve orders' });
@@ -32,22 +34,34 @@ export const createOrder = async (req, res) => {
     return res.status(400).json({ error: 'Invalid order details. Make sure customer_name, items (array), and total_amount are provided.' });
   }
 
+  const connection = await db.getConnection();
   try {
-    const itemsJson = JSON.stringify(items);
+    await connection.beginTransaction();
+
     const payStatus = payment_status || 'pending';
     const ordStatus = order_status || 'pending';
     const tableNum = parseInt(table_number, 10) || 0;
 
-    const [result] = await db.query(
-      'INSERT INTO orders (customer_name, table_number, items, total_amount, payment_status, order_status) VALUES (?, ?, ?, ?, ?, ?)',
-      [customer_name, tableNum, itemsJson, total_amount, payStatus, ordStatus]
+    const [result] = await connection.query(
+      'INSERT INTO orders (customer_name, table_number, total_amount, payment_status, order_status) VALUES (?, ?, ?, ?, ?)',
+      [customer_name, tableNum, total_amount, payStatus, ordStatus]
     );
+    const orderId = result.insertId;
+
+    for (const item of items) {
+      await connection.query(
+        'INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)',
+        [orderId, item.id, item.name, item.price, item.quantity]
+      );
+    }
+
+    await connection.commit();
 
     res.status(201).json({
       message: 'Order created successfully',
-      orderId: result.insertId,
+      orderId: orderId,
       order: {
-        id: result.insertId,
+        id: orderId,
         customer_name,
         table_number: tableNum,
         items,
@@ -58,8 +72,11 @@ export const createOrder = async (req, res) => {
       }
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error creating order:', error);
     res.status(500).json({ error: 'Failed to place order' });
+  } finally {
+    connection.release();
   }
 };
 

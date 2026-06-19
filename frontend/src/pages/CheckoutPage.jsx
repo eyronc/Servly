@@ -156,6 +156,8 @@ export default function CheckoutPage({ cart, clearCart, setPage, apiBaseUrl, tab
                   value={tableInput}
                   onChange={e => setTableInput(e.target.value)}
                   className="input-glass"
+                  disabled={!!tableNumber}
+                  style={tableNumber ? { opacity: 0.6, cursor: 'not-allowed', background: 'rgba(240, 240, 238, 0.6)' } : {}}
                 />
               </div>
 
