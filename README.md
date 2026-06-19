@@ -12,6 +12,7 @@ This repository is designed to showcase core technical capabilities across five 
 *   **Payment Simulation State Machine:** Rather than using generic alerts, the checkout flow triggers a sandboxed payment state machine (`processing` → `outcome selection` → `submitting` → `success` or `failure`). On payment success, it fires the POST request to the API, clears the customer's cart, and displays a success voucher. If it fails, it records the failure status in the database, preserves the user's cart, and allows a transaction retry.
 *   **Dynamic Client-Side QR Export:** To avoid server-side load or external API dependencies, the QR generator directly serializes the live DOM SVG element using `XMLSerializer` and dynamically triggers a client download of a high-resolution, infinitely scalable SVG vector.
 *   **Cross-Device Local Testing:** The backend server binds to `0.0.0.0` (rather than restricted `localhost`), allowing customers' physical mobile devices on the same Wi-Fi network to browse and execute orders against the developer's machine.
+*   **Seamless Menu Refreshing:** Implemented an in-app refresh button allowing customers to update the live menu without triggering the browser's native `beforeunload` event, thereby preventing accidental session disconnection.
 
 ### 2. Code Organization
 ```
@@ -49,10 +50,11 @@ Servly/
 *   **Color Palette & Typography:** Used an elegant dark/gold color palette (`#d97706` Amber combined with deep Slate) that evokes luxury hospitality. Configured modern typography using the Google Fonts `Plus Jakarta Sans` and `Outfit` via Tailwind v4 CSS `@theme` tokens.
 *   **Micro-interactions & Responsiveness:** Fully mobile-responsive interface mimicking native iOS/Android food delivery apps. Features a floating bottom action dock showing current cart totals, custom hover animations (`hover-lift`), and smooth state transitions.
 *   **Operator Dashboard:** Designed a premium glassmorphic control center for restaurant admins, containing live key performance indicators (Revenue, Active Orders, Completed Orders, Payment Failures) and inline status modifiers.
+*   **Context-Aware Checkout:** The checkout form intelligently detects if a customer is already bound to a specific table session and automatically locks the table input field, preventing accidental reassignment.
 
 ### 4. API Understanding
 *   **RESTful Resource Architecture:** Exposes clean resources (`/api/products` and `/api/orders`) using standard HTTP verbs (`GET`, `POST`, `PATCH`) and return codes (`200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, `500 Server Error`).
-*   **JSON Data Integrity:** Cart items are stored inside MySQL as a native `JSON` column, preserving structured multi-item order histories without bloated join tables, while utilizing proper data validation rules.
+*   **Relational Data Integrity:** Normalized the database architecture by extracting order items into a dedicated `order_items` table. The backend employs secure MySQL transactions to guarantee that orders and their associated items are created atomically, eliminating the risk of partial data inserts.
 
 ### 5. Development Workflow
 *   **Automated Scaffolding & Setup:** Boots quickly with minimal dependencies, using standard package configurations.
