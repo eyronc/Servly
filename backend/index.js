@@ -19,7 +19,7 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:5173', 
   'http://127.0.0.1:5173',
-  process.env.FRONTEND_URL // Will be injected in production (e.g. https://servly.vercel.app)
+  process.env.FRONTEND_URL // Will be injected via .env
 ].filter(Boolean);
 
 app.use(cors({

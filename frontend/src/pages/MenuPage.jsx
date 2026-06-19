@@ -11,20 +11,21 @@ export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNu
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [addedIds, setAddedIds] = useState({}); // track which items were just added
 
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiBaseUrl}/api/products`);
+      setProducts(response.data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Unable to fetch menu. Please check database connection or XAMPP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get(`${apiBaseUrl}/api/products`);
-        setProducts(response.data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching products:', err);
-        setError('Unable to fetch menu. Please check database connection or XAMPP.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchProducts();
   }, [apiBaseUrl]);
 
@@ -55,14 +56,41 @@ export default function MenuPage({ cart, addToCart, setPage, apiBaseUrl, tableNu
           <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
             <Logo size={36} theme="light" />
 
-            {tableNumber && (
-              <div
-                className="glass-amber px-4 py-1.5 rounded-full text-xs font-bold tracking-wide animate-float"
-                style={{ color: '#b45309' }}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={fetchProducts}
+                disabled={loading}
+                className="press-effect"
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.8)',
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#57534e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: loading ? 'wait' : 'pointer'
+                }}
               >
-                🪑 Table {tableNumber}
-              </div>
-            )}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: loading ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s ease' }}>
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                Refresh
+              </button>
+
+              {tableNumber && (
+                <div
+                  className="glass-amber px-4 py-1.5 rounded-full text-xs font-bold tracking-wide animate-float"
+                  style={{ color: '#b45309' }}
+                >
+                  🪑 Table {tableNumber}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
